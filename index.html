@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema Web de Recebimento de Unidades | WMS</title>
+  <!-- Google Fonts & FontAwesome / Lucide Icons CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- SheetJS CDN for Excel Export -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Chart.js CDN for Admin Dashboard -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="dark-theme">
+  <!-- GLOBAL ERROR CATCHER & VISUAL CONSOLE FOR DEBUGGING -->
+  <script>
+    (function() {
+      var logs = [];
+      function addLog(type, text) {
+        logs.push({type: type, text: text});
+        updateUI();
+      }
+      
+      var originalLog = console.log;
+      var originalWarn = console.warn;
+      var originalError = console.error;
+      
+      console.log = function() {
+        originalLog.apply(console, arguments);
+        addLog('log', Array.from(arguments).map(String).join(' '));
+      };
+      console.warn = function() {
+        originalWarn.apply(console, arguments);
+        addLog('warn', Array.from(arguments).map(String).join(' '));
+      };
+      console.error = function() {
+        originalError.apply(console, arguments);
+        addLog('error', Array.from(arguments).map(String).join(' '));
+      };
+
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        var errMsg = msg + ' (' + url + ':' + lineNo + ')';
+        addLog('error', 'CRITICAL ERROR: ' + errMsg);
+        return false;
+      };
+
+      window.addEventListener('unhandledrejection', function(event) {
+        addLog('error', 'UNHANDLED REJECTION: ' + event.reason);
+      });
+
+      function updateUI() {
+        var panel = document.getElementById('debug-panel');
+        if (!panel) {
+          panel = document.createElement('div');
+          panel.id = 'debug-panel';
+          panel.style.cssText = 'position:fixed;bottom:10px;right:10px;width:350px;max-height:220px;overflow-y:auto;background:rgba(15,23,42,0.95);color:#38bdf8;font-family:monospace;font-size:11px;z-index:999999;padding:12px;border:1px solid #0284c7;border-radius:8px;line-height:1.4;box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);';
+          document.body.appendChild(panel);
+        }
+        panel.innerHTML = '<div style="font-weight:bold;color:#f8fafc;border-bottom:1px solid #334155;padding-bottom:4px;margin-bottom:6px;">🛠️ Painel de Diagnóstico JS</div>' + 
+          logs.slice(-8).map(function(l) {
+            var color = l.type === 'error' ? '#ef4444' : (l.type === 'warn' ? '#f59e0b' : '#38bdf8');
+            return '<div style="color:' + color + ';margin-bottom:3px;word-break:break-all;">[' + l.type.toUpperCase() + '] ' + l.text + '</div>';
+          }).join('') + 
+          (logs.length === 0 ? '<span style="color:#64748b">Nenhum log registrado ainda.</span>' : '');
+      }
+
+      window.addEventListener('load', function() {
+        updateUI();
+      });
+    })();
+  </script>
+  <!-- LOGIN SCREEN MODAL / OVERLAY -->
+  <div id="login-modal" class="login-overlay active">
+    <div class="login-card glass-panel">
+      <div class="login-header">
+        <div class="brand-logo">
+          <i class="fa-solid fa-boxes-packing"></i>
+        </div>
+        <h2>LOGÍSTICA & RECEBIMENTO</h2>
+        <p>Sistema de Controle de Unidades</p>
+      </div>
+
+      <form id="login-form" onsubmit="event.preventDefault(); handleLoginSubmit(event);">
+        <div class="form-group">
+          <label for="login-username"><i class="fa-solid fa-user-gear"></i> Usuário (NOME.SOBRENOME)</label>
+          <input type="text" id="login-username" placeholder="Ex: RODRIGO.BARRETO" required autocomplete="off" style="text-transform: uppercase;">
+          <small class="help-text">Formato obrigatório: <b>NOME.SOBRENOME</b></small>
+        </div>
+
+        <div class="form-group">
+          <label for="login-role"><i class="fa-solid fa-shield-halved"></i> Perfil / Nível de Acesso</label>
+          <select id="login-role" required>
+            <option value="ADMIN">Administrador</option>
+            <option value="OPERATOR">Operador</option>
+          </select>
+        </div>
+
+        <div class="quick-logins">
+          <label>Acesso Rápido de Teste:</label>
+          <div class="quick-btn-group">
+            <button type="button" class="btn-chip" onclick="quickLogin('RODRIGO.BARRETO', 'ADMIN')">
+              <i class="fa-solid fa-user-shield"></i> RODRIGO.BARRETO (Admin)
+            </button>
+            <button type="button" class="btn-chip" onclick="quickLogin('JOAO.SILVA', 'OPERATOR')">
+              <i class="fa-solid fa-user-tag"></i> JOAO.SILVA (Operador)
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">
+          <i class="fa-solid fa-right-to-bracket"></i> Acessar Sistema
+        </button>
+      </form>
+      <div id="login-error-msg" class="alert alert-danger hidden"></div>
+    </div>
+  </div>
+
+  <!-- MAIN APP LAYOUT CONTAINER -->
+  <div id="app-container" class="app-layout hidden">
+
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="sidebar glass-sidebar">
+      <div class="sidebar-brand">
+        <i class="fa-solid fa-boxes-packing brand-icon"></i>
+        <div class="brand-text">
+          <span class="title">WMS RECEBIMENTO</span>
+          <span class="sub">Gestão de Unidades</span>
+        </div>
+      </div>
+
+      <div class="user-badge-sidebar">
+        <div class="avatar" id="sidebar-user-avatar">RB</div>
+        <div class="user-info">
+          <span class="user-name" id="sidebar-user-name">RODRIGO.BARRETO</span>
+          <span class="user-role badge" id="sidebar-user-role">ADMINISTRADOR</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+
+        <!-- DASHBOARD (ONLY FOR ADMIN) -->
+        <a href="#dashboard" class="nav-item admin-only active" onclick="navigate('dashboard')">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Dashboard</span>
+        </a>
+
+        <!-- CADASTRO (ONLY FOR ADMIN) -->
+        <div class="nav-group admin-only">
+          <div class="nav-group-title"><i class="fa-solid fa-sliders"></i> Cadastros</div>
+          <a href="#cadastro-modelo" class="nav-item nav-sub" onclick="navigate('cadastro-modelo')">
+            <i class="fa-solid fa-microchip"></i>
+            <span>Modelos & Regras</span>
+          </a>
+          <a href="#cadastro-usuario" class="nav-item nav-sub" onclick="navigate('cadastro-usuario')">
+            <i class="fa-solid fa-users-gear"></i>
+            <span>Usuários</span>
+          </a>
+          <a href="#cadastro-localidade" class="nav-item nav-sub" onclick="navigate('cadastro-localidade')">
+            <i class="fa-solid fa-warehouse"></i>
+            <span>Localidades</span>
+          </a>
+        </div>
+
+        <!-- OPERAÇÃO -->
+        <div class="nav-group">
+          <div class="nav-group-title"><i class="fa-solid fa-barcode"></i> Operação</div>
+          
+          <a href="#recebimento" class="nav-item" onclick="navigate('recebimento')">
+            <i class="fa-solid fa-dolly"></i>
+            <span>Recebimento</span>
+          </a>
+
+          <!-- APONTAMENTO WITH SUBMENUS -->
+          <div class="nav-accordion">
+            <div class="nav-item accordion-header" onclick="toggleAccordion('apontamento-submenu')">
+              <i class="fa-solid fa-clipboard-check"></i>
+              <span>Apontamento</span>
+              <i class="fa-solid fa-chevron-down accordion-icon"></i>
+            </div>
+            <div class="accordion-content hidden" id="apontamento-submenu">
+              <a href="#apontamento-cosmetico" class="nav-item nav-sub" onclick="navigate('apontamento-cosmetico')">
+                <i class="fa-solid fa-sparkles"></i>
+                <span>Cosmético</span>
+              </a>
+              <a href="#apontamento-funcional" class="nav-item nav-sub" onclick="navigate('apontamento-funcional')">
+                <i class="fa-solid fa-plug-circle-check"></i>
+                <span>Funcional</span>
+              </a>
+            </div>
+          </div>
+
+          <a href="#embalagem" class="nav-item" onclick="navigate('embalagem')">
+            <i class="fa-solid fa-box-open"></i>
+            <span>Embalagem</span>
+          </a>
+
+          <a href="#expedicao" class="nav-item" onclick="navigate('expedicao')">
+            <i class="fa-solid fa-truck-fast"></i>
+            <span>Expedição</span>
+          </a>
+        </div>
+
+        <!-- CONSULTAS E RELATÓRIOS -->
+        <div class="nav-group">
+          <div class="nav-group-title"><i class="fa-solid fa-magnifying-glass"></i> Consultas</div>
+          
+          <a href="#consulta" class="nav-item" onclick="navigate('consulta')">
+            <i class="fa-solid fa-receipt"></i>
+            <span>Consultar Unidade</span>
+          </a>
+
+          <!-- RELATÓRIO WITH SUBMENUS -->
+          <div class="nav-accordion">
+            <div class="nav-item accordion-header" onclick="toggleAccordion('relatorio-submenu')">
+              <i class="fa-solid fa-file-excel"></i>
+              <span>Relatórios (Excel)</span>
+              <i class="fa-solid fa-chevron-down accordion-icon"></i>
+            </div>
+            <div class="accordion-content hidden" id="relatorio-submenu">
+              <a href="#relatorio-recebimento" class="nav-item nav-sub" onclick="navigate('relatorio-recebimento')">
+                <i class="fa-solid fa-file-invoice"></i> Recebimento
+              </a>
+              <a href="#relatorio-cosmetico" class="nav-item nav-sub" onclick="navigate('relatorio-cosmetico')">
+                <i class="fa-solid fa-file-shield"></i> Cosmético
+              </a>
+              <a href="#relatorio-funcional" class="nav-item nav-sub" onclick="navigate('relatorio-funcional')">
+                <i class="fa-solid fa-file-waveform"></i> Funcional
+              </a>
+              <a href="#relatorio-embalagem" class="nav-item nav-sub" onclick="navigate('relatorio-embalagem')">
+                <i class="fa-solid fa-file-circle-check"></i> Embalagem
+              </a>
+              <a href="#relatorio-expedicao" class="nav-item nav-sub" onclick="navigate('relatorio-expedicao')">
+                <i class="fa-solid fa-truck-arrow-right"></i> Expedição
+              </a>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Hiding logout button as login is bypassed -->
+      <div class="sidebar-footer" style="display: none;">
+        <button class="btn btn-outline btn-sm btn-block" onclick="logout()">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i> Sair do Sistema
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="main-content">
+      
+      <!-- TOPBAR HEADER -->
+      <header class="topbar glass-header">
+        <div class="topbar-title">
+          <h1 id="page-title">Dashboard Inicial</h1>
+          <span id="page-subtitle" class="text-muted">Visão geral do sistema de recebimento e apontamentos</span>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="status-indicator online">
+            <span class="dot"></span> Sistema Operacional
+          </div>
+          <button class="theme-toggle" onclick="toggleTheme()" title="Alternar Tema">
+            <i class="fa-solid fa-moon"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- PAGE VIEWS CONTAINER -->
+      <div class="content-body">
+
+        <!-- 1. DASHBOARD VIEW (ADMIN) -->
+        <section id="view-dashboard" class="page-view active">
+          <div class="metrics-grid">
+            <div class="metric-card primary">
+              <div class="metric-icon"><i class="fa-solid fa-dolly"></i></div>
+              <div class="metric-data">
+                <span class="label">Total Recebidos</span>
+                <span class="value" id="dash-recebidos-count">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card info">
+              <div class="metric-icon"><i class="fa-solid fa-sparkles"></i></div>
+              <div class="metric-data">
+                <span class="label">Apontamentos Cosméticos</span>
+                <span class="value" id="dash-cosmeticos-count">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card warning">
+              <div class="metric-icon"><i class="fa-solid fa-plug-circle-check"></i></div>
+              <div class="metric-data">
+                <span class="label">Apontamentos Funcionais</span>
+                <span class="value" id="dash-funcionais-count">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card success">
+              <div class="metric-icon"><i class="fa-solid fa-box-open"></i></div>
+              <div class="metric-data">
+                <span class="label">Embalagens</span>
+                <span class="value" id="dash-embalagens-count">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card purple">
+              <div class="metric-icon"><i class="fa-solid fa-truck-fast"></i></div>
+              <div class="metric-data">
+                <span class="label">Expedições</span>
+                <span class="value" id="dash-expedicoes-count">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- DASHBOARD CHARTS ROW -->
+          <div class="charts-grid">
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-chart-bar"></i> Recebimentos por Fabricante</h3>
+              </div>
+              <div class="card-body">
+                <canvas id="chart-fabricantes"></canvas>
+              </div>
+            </div>
+
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-chart-donut"></i> Status dos Itens no Fluxo</h3>
+              </div>
+              <div class="card-body">
+                <canvas id="chart-status"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- RECENT ACTIVITY TABLE -->
+          <div class="card glass-card margin-top">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-clock-rotate-left"></i> Últimos Recebimentos Cadastrados</h3>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Data/Hora</th>
+                      <th>Fabricante</th>
+                      <th>Modelo</th>
+                      <th>Serial</th>
+                      <th>GPON / MAC</th>
+                      <th>Localidade</th>
+                      <th>Operador</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="dash-recent-table-body">
+                    <!-- Dynamic Rows -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. CADASTRO DE MODELO VIEW (ADMIN) -->
+        <section id="view-cadastro-modelo" class="page-view">
+          <div class="grid-2col">
+            
+            <!-- FORM CADASTRO DE MODELO -->
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-plus-circle"></i> Cadastrar Novo Modelo</h3>
+              </div>
+              <div class="card-body">
+                <form id="form-modelo" onsubmit="saveModelo(event)">
+                  
+                  <div class="form-group">
+                    <label for="mod-fabricante-select"><i class="fa-solid fa-industry"></i> Fabricante *</label>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                      <select id="mod-fabricante-select" onchange="toggleNewFabricanteInput()" required>
+                        <option value="">-- Selecione o Fabricante --</option>
+                        <option value="NEW_FABRICANTE">+ Cadastrar Novo Fabricante...</option>
+                      </select>
+                      <input type="text" id="mod-fabricante" placeholder="Digite o nome do novo fabricante..." style="display: none; text-transform: uppercase;">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="mod-nome"><i class="fa-solid fa-microchip"></i> Nome do Modelo *</label>
+                    <input type="text" id="mod-nome" placeholder="Ex: HG8145V5, F670L, HG6245N" required style="text-transform: uppercase;">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="mod-campos-count"><i class="fa-solid fa-barcode"></i> Quantidade de Campos Bipáveis *</label>
+                    <select id="mod-campos-count" onchange="renderModelRuleFields()" required>
+                      <option value="1">1 Campo Bipável (SERIAL)</option>
+                      <option value="2" selected>2 Campos Bipáveis (SERIAL e MAC)</option>
+                      <option value="3">3 Campos Bipáveis (SERIAL, GPON e MAC)</option>
+                      <option value="4">4 Campos Bipáveis (SERIAL, GPON, MAC e EAN)</option>
+                    </select>
+                  </div>
+
+                  <hr class="divider">
+
+                  <h4><i class="fa-solid fa-filter-circle-dollar"></i> Regras para os Campos Bipáveis</h4>
+                  <p class="text-muted small">Configure nome, tamanho e prefixos exigidos para validação na bipagem.</p>
+
+                  <div id="model-rules-container" class="rules-builder-list">
+                    <!-- Dynamic rule inputs generated by JS -->
+                  </div>
+
+                  <button type="submit" class="btn btn-primary btn-block margin-top">
+                    <i class="fa-solid fa-floppy-disk"></i> Salvar Modelo
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- TABELA DE MODELOS CADASTRADOS -->
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-list-check"></i> Modelos Cadastrados</h3>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Fabricante</th>
+                        <th>Modelo</th>
+                        <th>Campos</th>
+                        <th>Regras</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-modelos-body">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- 3. CADASTRO DE USUÁRIO VIEW (ADMIN) -->
+        <section id="view-cadastro-usuario" class="page-view">
+          <div class="grid-2col">
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3 id="user-form-title"><i class="fa-solid fa-user-plus"></i> Novo Usuário</h3>
+              </div>
+              <div class="card-body">
+                <form id="form-usuario" onsubmit="saveUsuario(event)">
+                  <div class="form-group">
+                    <label for="usr-login"><i class="fa-solid fa-id-card"></i> Login (NOME.SOBRENOME) *</label>
+                    <input type="text" id="usr-login" placeholder="Ex: MARCOS.SOUZA" required style="text-transform: uppercase;">
+                    <small class="help-text">Obrigatório incluir ponto (.) entre o nome e o sobrenome.</small>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="usr-nome"><i class="fa-solid fa-user"></i> Nome Completo *</label>
+                    <input type="text" id="usr-nome" placeholder="Ex: Marcos Souza Lima" required>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="usr-password"><i class="fa-solid fa-key"></i> Senha *</label>
+                    <input type="text" id="usr-password" placeholder="Digite a senha..." required value="123">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="usr-role"><i class="fa-solid fa-shield-halved"></i> Perfil *</label>
+                    <select id="usr-role" required>
+                      <option value="OPERATOR">Operador</option>
+                      <option value="ADMIN">Administrador</option>
+                    </select>
+                  </div>
+
+                  <button type="submit" id="btn-save-user" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-user-check"></i> Salvar Usuário
+                  </button>
+                  
+                  <button type="button" id="btn-cancel-user-edit" class="btn btn-secondary btn-block margin-top hidden" onclick="cancelUserEdit()">
+                    <i class="fa-solid fa-xmark"></i> Cancelar Edição
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-users"></i> Usuários Registrados</h3>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Login</th>
+                        <th>Nome</th>
+                        <th>Perfil</th>
+                        <th>Senha</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-usuarios-body">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. CADASTRO DE LOCALIDADE VIEW (ADMIN) -->
+        <section id="view-cadastro-localidade" class="page-view">
+          <div class="grid-2col">
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-location-dot"></i> Nova Localidade</h3>
+              </div>
+              <div class="card-body">
+                <form id="form-localidade" onsubmit="saveLocalidade(event)">
+                  <div class="form-group">
+                    <label for="loc-nome"><i class="fa-solid fa-warehouse"></i> Nome da Localidade / Box *</label>
+                    <input type="text" id="loc-nome" placeholder="Ex: DOCA 01, PRATELEIRA A3, BANCADA 02" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="form-group">
+                    <label for="loc-desc">Descrição / Detalhes</label>
+                    <input type="text" id="loc-desc" placeholder="Ex: Área de recebimento principal">
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-floppy-disk"></i> Cadastrar Localidade
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-map-location-dot"></i> Localidades Disponíveis</h3>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Localidade</th>
+                        <th>Descrição</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-localidades-body">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. MENU RECEBIMENTO (OPERACIONAL) -->
+        <section id="view-recebimento" class="page-view">
+          <div class="card glass-card highlight-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-dolly"></i> Leitura e Recebimento de Unidades</h3>
+              <span class="badge badge-info"><i class="fa-solid fa-bolt"></i> Trava Anti-Duplicidade Ativa</span>
+            </div>
+            <div class="card-body">
+              
+              <!-- FILTERS / SELECTIONS -->
+              <div class="grid-3col">
+                <div class="form-group">
+                  <label for="rec-fabricante"><i class="fa-solid fa-industry"></i> 1. Selecione o Fabricante *</label>
+                  <select id="rec-fabricante" onchange="onRecebimentoFabricanteChange()" required>
+                    <option value="">-- Selecione o Fabricante --</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="rec-modelo"><i class="fa-solid fa-microchip"></i> 2. Selecione o Modelo *</label>
+                  <select id="rec-modelo" onchange="onRecebimentoModeloChange()" required disabled>
+                    <option value="">-- Selecione o Fabricante Primeiro --</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="rec-localidade"><i class="fa-solid fa-warehouse"></i> 3. Localidade de Armazenagem *</label>
+                  <select id="rec-localidade" required>
+                    <option value="">-- Selecione a Localidade --</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- DYNAMIC SCANNING AREA -->
+              <div id="recebimento-scanner-section" class="scanner-section hidden margin-top">
+                <div class="scanner-banner">
+                  <i class="fa-solid fa-barcode"></i>
+                  <div>
+                    <h4 id="rec-model-title">Modelo Selecionado: HUAWEI - HG8145V5</h4>
+                    <p id="rec-model-rules-summary" class="small">Campos exigidos para este modelo: SERIAL, MAC</p>
+                  </div>
+                </div>
+
+                <form id="form-bipagem" onsubmit="processRecebimentoSubmit(event)">
+                  <div id="dynamic-bip-inputs" class="bip-inputs-grid">
+                    <!-- Dynamic Scanned Fields Generated by JS -->
+                  </div>
+
+                  <div class="scanner-actions">
+                    <button type="submit" class="btn btn-success btn-lg">
+                      <i class="fa-solid fa-check-double"></i> CONFIRMAR RECEBIMENTO (ENTER)
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="clearRecebimentoFields()">
+                      <i class="fa-solid fa-eraser"></i> Limpar Campos
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- RECENT SESSIONS TABLE -->
+          <div class="card glass-card margin-top">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-list"></i> Unidades Recebidas Nesta Sessão</h3>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Horário</th>
+                      <th>Fabricante / Modelo</th>
+                      <th>Serial</th>
+                      <th>GPON / MAC</th>
+                      <th>Localidade</th>
+                      <th>Operador</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-recebidos-sessao">
+                    <!-- Dynamic -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. APONTAMENTO COSMÉTICO VIEW -->
+        <section id="view-apontamento-cosmetico" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-sparkles"></i> Apontamento de Inspeção Cosmética</h3>
+            </div>
+            <div class="card-body">
+              <form id="form-cosmetico" onsubmit="saveApontamentoCosmetico(event)">
+                <div class="form-group">
+                  <label for="cos-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade *</label>
+                  <input type="text" id="cos-serial" placeholder="Bipe o SERIAL da unidade recebida..." required onchange="lookupUnitForCosmetico()">
+                </div>
+
+                <!-- UNIT DETAILS PREVIEW -->
+                <div id="cos-unit-preview" class="unit-preview-card hidden">
+                  <div class="preview-grid">
+                    <div><strong>Fabricante:</strong> <span id="cos-prev-fab">-</span></div>
+                    <div><strong>Modelo:</strong> <span id="cos-prev-mod">-</span></div>
+                    <div><strong>Localidade:</strong> <span id="cos-prev-loc">-</span></div>
+                    <div><strong>Status Atual:</strong> <span id="cos-prev-status" class="badge">-</span></div>
+                  </div>
+                </div>
+
+                <div class="form-group margin-top">
+                  <label><i class="fa-solid fa-square-check"></i> Resultado da Inspeção Cosmética *</label>
+                  <div class="radio-toggle">
+                    <label class="radio-card success">
+                      <input type="radio" name="cos-resultado" value="APROVADO" checked>
+                      <span><i class="fa-solid fa-thumbs-up"></i> APROVADO</span>
+                    </label>
+                    <label class="radio-card danger">
+                      <input type="radio" name="cos-resultado" value="REPROVADO">
+                      <span><i class="fa-solid fa-thumbs-down"></i> REPROVADO</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="cos-defeitos"><i class="fa-solid fa-triangle-exclamation"></i> Defeitos Cosméticos Encontrados (Se houver)</label>
+                  <select id="cos-defeitos" multiple class="select-multiple">
+                    <option value="CARCAÇA_ARRANHADA">Carcaça Arranhada / Riscada</option>
+                    <option value="CARCAÇA_QUEBRADA">Carcaça Quebrada / Trincada</option>
+                    <option value="ETIQUETA_DANIFICADA">Etiqueta do Produto Danificada/Ilegível</option>
+                    <option value="SEM_PARAFUSOS">Sem Parafusos de Fixação</option>
+                    <option value="SUJEIRA_GRAVE">Sujeira Grave / Manchas de Óleo</option>
+                    <option value="CONECTOR_DANIFICADO">Conector RJA / PON Quebrado</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="cos-obs">Observações do Apontamento</label>
+                  <textarea id="cos-obs" rows="2" placeholder="Insira detalhes adicionais..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                  <i class="fa-solid fa-floppy-disk"></i> Salvar Apontamento Cosmético
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- 7. APONTAMENTO FUNCIONAL VIEW -->
+        <section id="view-apontamento-funcional" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-plug-circle-check"></i> Apontamento de Teste Funcional</h3>
+            </div>
+            <div class="card-body">
+              <form id="form-funcional" onsubmit="saveApontamentoFuncional(event)">
+                <div class="form-group">
+                  <label for="func-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade *</label>
+                  <input type="text" id="func-serial" placeholder="Bipe o SERIAL da unidade..." required onchange="lookupUnitForFuncional()">
+                </div>
+
+                <!-- UNIT DETAILS PREVIEW -->
+                <div id="func-unit-preview" class="unit-preview-card hidden">
+                  <div class="preview-grid">
+                    <div><strong>Fabricante:</strong> <span id="func-prev-fab">-</span></div>
+                    <div><strong>Modelo:</strong> <span id="func-prev-mod">-</span></div>
+                    <div><strong>Cosmético:</strong> <span id="func-prev-cos" class="badge">-</span></div>
+                    <div><strong>Status Atual:</strong> <span id="func-prev-status" class="badge">-</span></div>
+                  </div>
+                </div>
+
+                <div class="form-group margin-top">
+                  <label><i class="fa-solid fa-list-check"></i> Check-list de Testes Funcionais</label>
+                  <div class="checkbox-grid">
+                    <label class="checkbox-card">
+                      <input type="checkbox" id="chk-power" checked>
+                      <span><i class="fa-solid fa-power-off"></i> Teste de Alimentação (Power ON)</span>
+                    </label>
+                    <label class="checkbox-card">
+                      <input type="checkbox" id="chk-wifi" checked>
+                      <span><i class="fa-solid fa-wifi"></i> Teste Sinal Wi-Fi (2.4G / 5G)</span>
+                    </label>
+                    <label class="checkbox-card">
+                      <input type="checkbox" id="chk-lan" checked>
+                      <span><i class="fa-solid fa-network-wired"></i> Teste de Portas Ethernet/LAN</span>
+                    </label>
+                    <label class="checkbox-card">
+                      <input type="checkbox" id="chk-pon" checked>
+                      <span><i class="fa-solid fa-tower-cell"></i> Teste Conectividade PON/Fibra</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label><i class="fa-solid fa-square-check"></i> Resultado do Teste Funcional *</label>
+                  <div class="radio-toggle">
+                    <label class="radio-card success">
+                      <input type="radio" name="func-resultado" value="APROVADO" checked>
+                      <span><i class="fa-solid fa-thumbs-up"></i> APROVADO</span>
+                    </label>
+                    <label class="radio-card danger">
+                      <input type="radio" name="func-resultado" value="REPROVADO">
+                      <span><i class="fa-solid fa-thumbs-down"></i> REPROVADO</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="func-obs">Observações do Teste</label>
+                  <textarea id="func-obs" rows="2" placeholder="Descreva os testes executados..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                  <i class="fa-solid fa-floppy-disk"></i> Salvar Apontamento Funcional
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8. MENU EMBALAGEM VIEW -->
+        <section id="view-embalagem" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-box-open"></i> Processo de Embalagem (Formação de Caixa)</h3>
+            </div>
+            <div class="card-body">
+              <div class="grid-2col">
+                <form id="form-embalagem" onsubmit="processEmbalarUnidade(event)">
+                  <div class="form-group">
+                    <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa *</label>
+                    <input type="text" id="emb-caixa-id" placeholder="Ex: CX-2026-001" required style="text-transform: uppercase;">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="emb-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade Aprovada *</label>
+                    <input type="text" id="emb-serial" placeholder="Bipe o SERIAL da unidade testada..." required>
+                  </div>
+
+                  <button type="submit" class="btn btn-success btn-block">
+                    <i class="fa-solid fa-box-archive"></i> Embalar Unidade na Caixa
+                  </button>
+                </form>
+
+                <div class="box-status-card">
+                  <h4><i class="fa-solid fa-boxes-stacked"></i> Resumo da Caixa Atual</h4>
+                  <div class="box-stat-item">
+                    <span>Código da Caixa:</span>
+                    <strong id="current-box-code">NENHUMA CAIXA</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Unidades na Caixa:</span>
+                    <strong id="current-box-count">0</strong>
+                  </div>
+                  <div class="box-unit-list" id="current-box-units">
+                    <p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 9. MENU EXPEDIÇÃO VIEW -->
+        <section id="view-expedicao" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-truck-fast"></i> Expedição de Unidades / Caixas</h3>
+            </div>
+            <div class="card-body">
+              <form id="form-expedicao" onsubmit="processExpedicao(event)">
+                <div class="grid-2col">
+                  <div class="form-group">
+                    <label for="exp-ordem"><i class="fa-solid fa-file-contract"></i> Ordem de Expedição / Nota *</label>
+                    <input type="text" id="exp-ordem" placeholder="Ex: ORD-8842-EXP" required style="text-transform: uppercase;">
+                  </div>
+
+                  <div class="form-group">
+                    <label for="exp-destino"><i class="fa-solid fa-location-crosshairs"></i> Destino / Cliente *</label>
+                    <input type="text" id="exp-destino" placeholder="Ex: CENTRO DE DISTRIBUIÇÃO SP" required>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="exp-barcode"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade ou Código da Caixa *</label>
+                  <input type="text" id="exp-barcode" placeholder="Bipe o SERIAL ou Código da CAIXA..." required>
+                </div>
+
+                <button type="submit" class="btn btn-purple btn-block">
+                  <i class="fa-solid fa-paper-plane"></i> Confirmar Expedição
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- 10. MENU CONSULTA VIEW -->
+        <section id="view-consulta" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-receipt"></i> Pesquisa Avançada de Unidades</h3>
+            </div>
+            <div class="card-body">
+              <div class="grid-4col">
+                <div class="form-group">
+                  <label for="search-term">Termo de Busca (Serial, GPON, MAC)</label>
+                  <input type="text" id="search-term" placeholder="Digite para buscar..." onkeyup="filterConsulta()">
+                </div>
+
+                <div class="form-group">
+                  <label for="search-fabricante">Fabricante</label>
+                  <select id="search-fabricante" onchange="filterConsulta()">
+                    <option value="">TODOS</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="search-status">Status do Fluxo</label>
+                  <select id="search-status" onchange="filterConsulta()">
+                    <option value="">TODOS</option>
+                    <option value="RECEBIDO">RECEBIDO</option>
+                    <option value="COSMETICO_OK">COSMETICO APROVADO</option>
+                    <option value="COSMETICO_NOK">COSMETICO REPROVADO</option>
+                    <option value="FUNCIONAL_OK">FUNCIONAL APROVADO</option>
+                    <option value="FUNCIONAL_NOK">FUNCIONAL REPROVADO</option>
+                    <option value="EMBALADO">EMBALADO</option>
+                    <option value="EXPEDIDO">EXPEDIDO</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="search-operador">Operador</label>
+                  <select id="search-operador" onchange="filterConsulta()">
+                    <option value="">TODOS</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="table-responsive margin-top">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Serial</th>
+                      <th>GPON / MAC</th>
+                      <th>Fabricante / Modelo</th>
+                      <th>Data Recebimento</th>
+                      <th>Status Atual</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-consulta-body">
+                    <!-- Dynamic -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 11. MENU RELATÓRIO VIEW (EXCEL EXPORT) -->
+        <section id="view-relatorios" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3 id="relatorio-title"><i class="fa-solid fa-file-excel"></i> Relatório de Recebimento</h3>
+              <button class="btn btn-success" onclick="exportCurrentReportToExcel()">
+                <i class="fa-solid fa-file-arrow-down"></i> BAIXAR EM EXCEL (.XLSX)
+              </button>
+            </div>
+            <div class="card-body">
+              
+              <!-- FILTROS DE RELATÓRIO -->
+              <div class="grid-4col">
+                <div class="form-group">
+                  <label for="rel-data-inicio"><i class="fa-solid fa-calendar-day"></i> Data Inicial</label>
+                  <input type="date" id="rel-data-inicio" onchange="renderRelatorioTable()">
+                </div>
+
+                <div class="form-group">
+                  <label for="rel-data-fim"><i class="fa-solid fa-calendar-day"></i> Data Final</label>
+                  <input type="date" id="rel-data-fim" onchange="renderRelatorioTable()">
+                </div>
+
+                <div class="form-group">
+                  <label for="rel-fabricante">Fabricante</label>
+                  <select id="rel-fabricante" onchange="renderRelatorioTable()">
+                    <option value="">TODOS OS FABRICANTES</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="rel-modelo">Modelo</label>
+                  <select id="rel-modelo" onchange="renderRelatorioTable()">
+                    <option value="">TODOS OS MODELOS</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="table-responsive margin-top">
+                <table class="data-table" id="table-relatorio">
+                  <thead id="relatorio-thead">
+                    <!-- Dynamic Headers based on Submenu -->
+                  </thead>
+                  <tbody id="relatorio-tbody">
+                    <!-- Dynamic Content -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL DE ALERTA DE ERRO / DUPLICIDADE (VISUAL + SONORO) -->
+  <div id="alert-modal" class="modal-overlay hidden">
+    <div class="modal-content alert-modal-content">
+      <div class="modal-icon danger">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h2 id="alert-modal-title">BLOQUEIO DE RECEBIMENTO</h2>
+      <p id="alert-modal-msg">UNIDADE JÁ RECEBIDA NO SISTEMA!</p>
+      <div id="alert-modal-details" class="alert-details"></div>
+      <button type="button" class="btn btn-danger btn-lg margin-top" onclick="closeAlertModal()">
+        <i class="fa-solid fa-check"></i> ENTENDIDO (FECHAR)
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL DETALHES DE RASTREADABILIDADE DA UNIDADE -->
+  <div id="unit-detail-modal" class="modal-overlay hidden">
+    <div class="modal-content glass-card lg">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-timeline"></i> Timeline e Histórico da Unidade</h3>
+        <button class="modal-close-btn" onclick="closeUnitDetailModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="unit-modal-body">
+        <!-- Dynamic timeline content -->
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPT FILES -->
+  <script src="js/audio.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/excel.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
