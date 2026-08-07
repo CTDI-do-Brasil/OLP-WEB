@@ -94,21 +94,18 @@
         </div>
 
         <div class="form-group">
-          <label for="login-role"><i class="fa-solid fa-shield-halved"></i> Perfil / Nível de Acesso</label>
-          <select id="login-role" required>
-            <option value="ADMIN">Administrador</option>
-            <option value="OPERATOR">Operador</option>
-          </select>
+          <label for="login-password"><i class="fa-solid fa-key"></i> Senha</label>
+          <input type="password" id="login-password" placeholder="Digite sua senha..." required autocomplete="off">
         </div>
 
         <div class="quick-logins">
           <label>Acesso Rápido de Teste:</label>
           <div class="quick-btn-group">
-            <button type="button" class="btn-chip" onclick="quickLogin('RODRIGO.BARRETO', 'ADMIN')">
-              <i class="fa-solid fa-user-shield"></i> RODRIGO.BARRETO (Admin)
+            <button type="button" class="btn-chip" onclick="quickLogin('RODRIGO.BARRETO', '123')">
+              <i class="fa-solid fa-user-shield"></i> RODRIGO.BARRETO (Admin - 123)
             </button>
-            <button type="button" class="btn-chip" onclick="quickLogin('JOAO.SILVA', 'OPERATOR')">
-              <i class="fa-solid fa-user-tag"></i> JOAO.SILVA (Operador)
+            <button type="button" class="btn-chip" onclick="quickLogin('JOAO.SILVA', '123')">
+              <i class="fa-solid fa-user-tag"></i> JOAO.SILVA (Operador - 123)
             </button>
           </div>
         </div>
@@ -243,8 +240,8 @@
         </div>
       </nav>
 
-      <!-- Hiding logout button as login is bypassed -->
-      <div class="sidebar-footer" style="display: none;">
+      <!-- Logout button visible -->
+      <div class="sidebar-footer">
         <button class="btn btn-outline btn-sm btn-block" onclick="logout()">
           <i class="fa-solid fa-arrow-right-from-bracket"></i> Sair do Sistema
         </button>

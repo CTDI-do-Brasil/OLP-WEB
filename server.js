@@ -16,9 +16,9 @@ let pool;
 
 // Auto Database setup & connection
 async function initDbConnection() {
-  const dbName = process.env.PGDATABASE || 'wms_receiving';
+  const dbName = process.env.PGDATABASE || 'OLP_WEB';
   
-  // Try connecting to default postgres database to verify/create wms_receiving
+  // Try connecting to default postgres database to verify/create OLP_WEB
   const mainClient = new Client({
     host: process.env.PGHOST || 'localhost',
     port: process.env.PGPORT || 5432,
@@ -32,7 +32,7 @@ async function initDbConnection() {
     const dbCheck = await mainClient.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
     if (dbCheck.rowCount === 0) {
       console.log(`[Database] Banco de dados "${dbName}" não encontrado. Criando...`);
-      await mainClient.query(`CREATE DATABASE ${dbName}`);
+      await mainClient.query(`CREATE DATABASE "${dbName}"`);
       console.log(`[Database] Banco de dados "${dbName}" criado com sucesso.`);
     }
   } catch (err) {
@@ -65,6 +65,32 @@ async function initDbConnection() {
 // ==========================================
 // API ROUTES
 // ==========================================
+
+// AUTHENTICATION
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Usuário e senha são obrigatórios!' });
+  }
+  
+  try {
+    const result = await pool.query('SELECT login, nome, role, senha FROM users WHERE login = $1', [username.toUpperCase()]);
+    if (result.rowCount === 0) {
+      return res.status(401).json({ error: 'Usuário não cadastrado!' });
+    }
+    const user = result.rows[0];
+    if (user.senha !== password) {
+      return res.status(401).json({ error: 'Senha incorreta!' });
+    }
+    res.json({
+      login: user.login,
+      nome: user.nome,
+      role: user.role
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // USERS ENDPOINTS
 app.get('/api/users', async (req, res) => {

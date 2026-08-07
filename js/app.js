@@ -196,40 +196,49 @@ function setupEventListeners() {
   }
 }
 
-function handleLoginSubmit(e) {
+async function handleLoginSubmit(e) {
   if(e) e.preventDefault();
   
   const loginInput = document.getElementById('login-username').value.trim().toUpperCase();
-  const roleInput = document.getElementById('login-role').value;
+  const passwordInput = document.getElementById('login-password').value;
   
   // Strict Regex Validation for NOME.SOBRENOME
   const loginRegex = /^[A-Z0-9\-_]+\.[A-Z0-9\-_]+$/;
   const errorDiv = document.getElementById('login-error-msg');
 
   if (!loginRegex.test(loginInput)) {
-    errorDiv.innerText = 'Formato inválido! O login deve ser NOME.SOBRENOME (ex: RODRIGO.BARRETO).';
+    errorDiv.innerText = 'Formato de usuário inválido! Use NOME.SOBRENOME (ex: RODRIGO.BARRETO).';
     errorDiv.classList.remove('hidden');
     return;
   }
 
   errorDiv.classList.add('hidden');
   
-  // Check or auto-register user
-  let user = appState.users.find(u => u.login === loginInput);
-  if (!user) {
-    user = { login: loginInput, nome: loginInput.replace('.', ' '), role: roleInput };
-    appState.users.push(user);
-    saveStateToStorage();
-  } else {
-    user.role = roleInput; // update active session role
-  }
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: loginInput, password: passwordInput })
+    });
+    
+    const data = await res.json();
+    if (!res.ok) {
+      errorDiv.innerText = data.error || 'Erro ao realizar login!';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
 
-  loginUser(user);
+    loginUser(data);
+  } catch (err) {
+    console.error(err);
+    errorDiv.innerText = 'Erro ao se conectar ao servidor!';
+    errorDiv.classList.remove('hidden');
+  }
 }
 
-function quickLogin(username, role) {
+function quickLogin(username, password) {
   document.getElementById('login-username').value = username;
-  document.getElementById('login-role').value = role;
+  document.getElementById('login-password').value = password;
   handleLoginSubmit();
 }
 
@@ -275,10 +284,6 @@ function checkSession() {
   const savedUser = localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
   if (savedUser) {
     loginUser(JSON.parse(savedUser));
-  } else {
-    // Login automático com o usuário Rodrigo Barreto (ADMIN) por padrão
-    const defaultUser = { login: 'RODRIGO.BARRETO', nome: 'Rodrigo Barreto', role: 'ADMIN' };
-    loginUser(defaultUser);
   }
 }
 
