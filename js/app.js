@@ -510,6 +510,7 @@ function renderModelRuleFields() {
     const fieldName = defaultNames[i] || `CAMPO_${i+1}`;
     const ruleBox = document.createElement('div');
     ruleBox.className = 'bip-field-card margin-top';
+    ruleBox.id = `rule-card-${i}`;
     ruleBox.innerHTML = `
       <div class="form-group">
         <label>Nome do Campo Bipável ${i+1}</label>
@@ -559,6 +560,8 @@ function toggleLengthInputs(selectEl) {
   }
 }
 
+let editingModelId = null;
+
 async function saveModelo(e) {
   e.preventDefault();
   
@@ -577,16 +580,16 @@ async function saveModelo(e) {
   }
 
   const nome = document.getElementById('mod-nome').value.trim().toUpperCase();
+  const targetId = editingModelId ? editingModelId : `MOD_${Date.now()}`;
   
-  // Validação contra modelos duplicados (Fabricante + Nome do Modelo)
-  const isDuplicate = appState.models.some(m => m.fabricante === fabricante && m.nome === nome);
+  // Validação contra modelos duplicados (Fabricante + Nome do Modelo), ignorando o próprio em edição
+  const isDuplicate = appState.models.some(m => m.id !== targetId && m.fabricante === fabricante && m.nome === nome);
   if (isDuplicate) {
     alert(`Erro: O modelo "${nome}" já está cadastrado para o fabricante "${fabricante}"!`);
     return;
   }
 
   const camposCount = parseInt(document.getElementById('mod-campos-count').value);
-
   const ruleCards = document.querySelectorAll('#model-rules-container .bip-field-card');
   const rules = [];
 
@@ -615,7 +618,7 @@ async function saveModelo(e) {
   });
 
   const newModel = {
-    id: `MOD_${Date.now()}`,
+    id: targetId,
     fabricante,
     nome,
     camposCount,
@@ -630,14 +633,23 @@ async function saveModelo(e) {
     });
     if (!res.ok) throw new Error("Erro de resposta do servidor");
 
-    appState.models.push(newModel);
+    if (editingModelId) {
+      const idx = appState.models.findIndex(m => m.id === editingModelId);
+      if (idx > -1) {
+        appState.models[idx] = newModel;
+      }
+      alert(`Modelo ${fabricante} - ${nome} atualizado com sucesso!`);
+      cancelModelEdit();
+    } else {
+      appState.models.push(newModel);
+      alert(`Modelo ${fabricante} - ${nome} cadastrado com sucesso!`);
+      document.getElementById('form-modelo').reset();
+      toggleNewFabricanteInput(); 
+      renderModelRuleFields();
+    }
+
     renderModelosTable();
     populateSelectDropdowns();
-
-    document.getElementById('form-modelo').reset();
-    toggleNewFabricanteInput(); // Oculta o campo de texto caso estivesse visível
-    renderModelRuleFields();
-    alert(`Modelo ${fabricante} - ${nome} cadastrado com sucesso!`);
   } catch (err) {
     console.error(err);
     alert("Erro ao salvar modelo no servidor!");
@@ -662,6 +674,9 @@ function renderModelosTable() {
       <td><span class="badge badge-info">${m.camposCount} Bipável(is)</span></td>
       <td class="small">${rulesSummary}</td>
       <td>
+        <button class="btn btn-primary btn-sm" onclick="editModelo('${m.id}')" style="margin-right: 5px;">
+          <i class="fa-solid fa-pen-to-square"></i> Editar
+        </button>
         <button class="btn btn-danger btn-sm" onclick="deleteModelo('${m.id}')">
           <i class="fa-solid fa-trash"></i> Excluir
         </button>
@@ -669,6 +684,83 @@ function renderModelosTable() {
     `;
     tbody.appendChild(tr);
   });
+}
+
+function editModelo(id) {
+  const model = appState.models.find(m => m.id === id);
+  if (!model) return;
+
+  editingModelId = id;
+
+  document.getElementById('model-form-title').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Editar Modelo';
+  document.getElementById('btn-save-model').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Atualizar Modelo';
+  document.getElementById('btn-cancel-model-edit').classList.remove('hidden');
+
+  const selectDropdown = document.getElementById('mod-fabricante-select');
+  const textInput = document.getElementById('mod-fabricante');
+  
+  let selectHasOption = false;
+  for (let i = 0; i < selectDropdown.options.length; i++) {
+    if (selectDropdown.options[i].value === model.fabricante) {
+      selectHasOption = true;
+      break;
+    }
+  }
+
+  if (selectHasOption) {
+    selectDropdown.value = model.fabricante;
+    textInput.style.display = 'none';
+    textInput.required = false;
+  } else {
+    selectDropdown.value = 'NEW_FABRICANTE';
+    textInput.value = model.fabricante;
+    textInput.style.display = 'block';
+    textInput.required = true;
+  }
+
+  document.getElementById('mod-nome').value = model.nome;
+  document.getElementById('mod-campos-count').value = model.camposCount;
+
+  renderModelRuleFields();
+
+  model.rules.forEach((rule, idx) => {
+    const card = document.getElementById(`rule-card-${idx}`);
+    if (card) {
+      card.querySelector('.mod-rule-name').value = rule.fieldName;
+      card.querySelector('.mod-rule-lentype').value = rule.lengthType;
+      
+      const exactGroup = card.querySelector('.mod-exact-group');
+      const rangeGroup = card.querySelector('.mod-range-group');
+      
+      if (rule.lengthType === 'EXACT') {
+        card.querySelector('.mod-rule-exact').value = rule.exactLength;
+        exactGroup.classList.remove('hidden');
+        rangeGroup.classList.add('hidden');
+      } else if (rule.lengthType === 'RANGE') {
+        card.querySelector('.mod-rule-range').value = `${rule.minLength},${rule.maxLength}`;
+        exactGroup.classList.add('hidden');
+        rangeGroup.classList.remove('hidden');
+      } else {
+        exactGroup.classList.add('hidden');
+        rangeGroup.classList.add('hidden');
+      }
+      card.querySelector('.mod-rule-prefixes').value = rule.prefixes;
+    }
+  });
+
+  document.getElementById('view-cadastro-modelo').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelModelEdit() {
+  editingModelId = null;
+
+  document.getElementById('model-form-title').innerHTML = '<i class="fa-solid fa-plus-circle"></i> Cadastrar Novo Modelo';
+  document.getElementById('btn-save-model').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Modelo';
+  document.getElementById('btn-cancel-model-edit').classList.add('hidden');
+
+  document.getElementById('form-modelo').reset();
+  toggleNewFabricanteInput();
+  renderModelRuleFields();
 }
 
 async function deleteModelo(id) {

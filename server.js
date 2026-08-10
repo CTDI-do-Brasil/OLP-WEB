@@ -150,10 +150,11 @@ app.post('/api/models', async (req, res) => {
   const { id, fabricante, nome, camposCount, rules } = req.body;
   try {
     await pool.query(
-      'INSERT INTO models (id, fabricante, nome, campos_count, rules) VALUES ($1, $2, $3, $4, $5)',
+      `INSERT INTO models (id, fabricante, nome, campos_count, rules) VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (id) DO UPDATE SET fabricante = $2, nome = $3, campos_count = $4, rules = $5`,
       [id, fabricante, nome, camposCount, JSON.stringify(rules)]
     );
-    res.status(201).json({ success: true, message: 'Modelo salvo!' });
+    res.status(201).json({ success: true, message: 'Modelo salvo com sucesso!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
