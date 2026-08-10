@@ -564,7 +564,7 @@ function toggleLengthInputs(selectEl) {
   }
 }
 
-function saveModelo(e) {
+async function saveModelo(e) {
   e.preventDefault();
   
   const selectVal = document.getElementById('mod-fabricante-select').value;
