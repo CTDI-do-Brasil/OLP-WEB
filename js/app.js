@@ -1117,7 +1117,8 @@ function renderRecebimentoDynamicInputs(modelObj) {
                data-rule-index="${index}"
                placeholder="Bipe ou digite o ${rule.fieldName}..." 
                required autocomplete="off"
-               oninput="validateRecebimentoSingleInput(this)">
+               oninput="validateRecebimentoSingleInput(this)"
+               onkeydown="handleRecebimentoInputKeyDown(event, this)">
         <div class="rule-feedback" id="feedback-field-${index}">
           <span class="small text-muted">Aguardando bipagem...</span>
         </div>
@@ -1131,6 +1132,39 @@ function renderRecebimentoDynamicInputs(modelObj) {
     const firstInput = document.getElementById('input-field-0');
     if (firstInput) firstInput.focus();
   }, 100);
+}
+
+function handleRecebimentoInputKeyDown(event, inputEl) {
+  if (event.key === 'Enter') {
+    event.preventDefault(); // Impede o envio padrão do formulário do HTML
+
+    const ruleIdx = parseInt(inputEl.dataset.ruleIndex);
+    const modelId = document.getElementById('rec-modelo').value;
+    const selectedModel = appState.models.find(m => m.id === modelId);
+    if (!selectedModel) return;
+
+    // Valida o campo atual
+    const ruleObj = selectedModel.rules[ruleIdx];
+    const val = inputEl.value.trim().toUpperCase();
+    const result = validateFieldRule(val, ruleObj);
+
+    if (!result.isValid) {
+      playErrorBeep();
+      return; // Trava se houver erro
+    }
+
+    const totalFields = selectedModel.rules.length;
+    if (ruleIdx < totalFields - 1) {
+      // Avança o foco para o próximo campo bipável
+      const nextInput = document.getElementById(`input-field-${ruleIdx + 1}`);
+      if (nextInput) {
+        nextInput.focus();
+      }
+    } else {
+      // Se for o último campo, confirma o recebimento de forma direta
+      processRecebimentoSubmit(event);
+    }
+  }
 }
 
 function validateRecebimentoSingleInput(inputEl) {
@@ -1166,7 +1200,7 @@ function validateRecebimentoSingleInput(inputEl) {
 }
 
 async function processRecebimentoSubmit(e) {
-  e.preventDefault();
+  if (e && e.preventDefault) e.preventDefault();
 
   const modelId = document.getElementById('rec-modelo').value;
   const localidade = document.getElementById('rec-localidade').value;
@@ -1177,26 +1211,44 @@ async function processRecebimentoSubmit(e) {
     return;
   }
 
-  // Gather scanned values
+  // Coleta os valores bipados de forma robusta
   const scannedInputs = document.querySelectorAll('#dynamic-bip-inputs input');
-  const valuesMap = {};
   const scannedArray = [];
-
   let hasRuleError = false;
 
+  let serialVal = '';
+  let gponVal = '';
+  let macVal = '';
+
   scannedInputs.forEach((inputEl, index) => {
-    const fieldName = inputEl.dataset.fieldName;
+    const fieldName = inputEl.dataset.fieldName.toUpperCase();
     const val = inputEl.value.trim().toUpperCase();
-    const ruleObj = selectedModel.rules[index];
-    
-    valuesMap[fieldName.toLowerCase()] = val;
     scannedArray.push(val);
 
+    const ruleObj = selectedModel.rules[index];
     const ruleRes = validateFieldRule(val, ruleObj);
     if (!ruleRes.isValid) {
       hasRuleError = true;
     }
+
+    if (fieldName.includes('SERIAL') || fieldName.includes('SERIE') || fieldName.includes('SÉRIE')) {
+      serialVal = val;
+    } else if (fieldName.includes('GPON') || fieldName.includes('PON')) {
+      gponVal = val;
+    } else if (fieldName.includes('MAC')) {
+      macVal = val;
+    }
   });
+
+  // Fallbacks de posição se não encontrar explicitamente pelo nome
+  if (!serialVal && scannedArray.length > 0) serialVal = scannedArray[0];
+  if (!macVal && scannedArray.length > 1) {
+    if (scannedArray.length === 2) macVal = scannedArray[1];
+    else if (scannedArray.length === 3) {
+      gponVal = scannedArray[1];
+      macVal = scannedArray[2];
+    }
+  }
 
   // 1. Rule validation check
   if (hasRuleError) {
@@ -1221,11 +1273,10 @@ async function processRecebimentoSubmit(e) {
     return;
   }
 
-  // 3. Database historical duplicate check (e.g. Serial or MAC already received)
   const dbItemToCheck = {
-    serial: valuesMap.serial || scannedArray[0] || '',
-    gpon: valuesMap.gpon || '',
-    mac: valuesMap.mac || (scannedArray.length > 1 ? scannedArray[1] : '')
+    serial: serialVal,
+    gpon: gponVal,
+    mac: macVal
   };
 
   const dbDup = checkDatabaseDuplicates(dbItemToCheck, appState.units);
