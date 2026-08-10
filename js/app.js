@@ -1366,15 +1366,47 @@ async function processRecebimentoSubmit(e) {
 
     renderRecebimentoSessaoTable();
     clearRecebimentoFields();
+    
+    // Mostra toast rápido de confirmação
+    showToast(`Unidade ${newUnit.serial} recebida com sucesso!`);
   } catch (err) {
     console.error(err);
     alert("Erro ao salvar recebimento no servidor!");
   }
 }
 
+function showToast(message, isError = false) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast-message ${isError ? 'error' : ''}`;
+  toast.innerHTML = `
+    <i class="fa-solid ${isError ? 'fa-circle-exclamation' : 'fa-circle-check'}"></i>
+    <span>${message}</span>
+  `;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('show');
+  }, 10);
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      toast.remove();
+    }, 350);
+  }, 2500);
+}
+
 function renderRecebimentoSessaoTable() {
   const tbody = document.getElementById('table-recebidos-sessao');
   tbody.innerHTML = '';
+
+  const counterEl = document.getElementById('session-receiving-counter');
+  if (counterEl) {
+    counterEl.innerText = appState.currentRecebimentoSession.length;
+  }
 
   appState.currentRecebimentoSession.forEach(u => {
     const tr = document.createElement('tr');

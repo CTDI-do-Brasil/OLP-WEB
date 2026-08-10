@@ -893,3 +893,45 @@ textarea:focus {
   font-size: 0.8rem;
   margin-bottom: 0.4rem;
 }
+
+/* Toast Notification System */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toast-message {
+  min-width: 300px;
+  background: rgba(16, 185, 129, 0.95); /* Success green */
+  color: #fff;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transform: translateX(120%);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 5px solid #064e3b;
+}
+
+.toast-message.show {
+  transform: translateX(0);
+}
+
+.toast-message.error {
+  background: rgba(239, 68, 68, 0.95); /* Danger red */
+  border-left-color: #7f1d1d;
+}
+
+.toast-message i {
+  font-size: 1.2rem;
+}
