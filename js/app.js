@@ -1192,6 +1192,44 @@ function validateRecebimentoSingleInput(inputEl) {
     card.className = 'bip-field-card valid';
     feedback.className = 'rule-feedback valid';
     feedback.innerHTML = '<i class="fa-solid fa-circle-check"></i> Regra atendida';
+
+    // Se todos os campos estiverem preenchidos e válidos, envia o recebimento automaticamente
+    const inputs = document.querySelectorAll('#dynamic-bip-inputs input');
+    let allFilled = true;
+    let allValid = true;
+
+    inputs.forEach((inp, idx) => {
+      const v = inp.value.trim().toUpperCase();
+      if (!v) {
+        allFilled = false;
+        allValid = false;
+        return;
+      }
+      const rObj = selectedModel.rules[idx];
+      const res = validateFieldRule(v, rObj);
+      if (!res.isValid) {
+        allValid = false;
+      }
+    });
+
+    if (allFilled && allValid) {
+      // Pequeno atraso de 150ms para feedback visual (ver o campo acender verde antes de enviar)
+      setTimeout(() => {
+        const freshInputs = document.querySelectorAll('#dynamic-bip-inputs input');
+        let stillGood = true;
+        freshInputs.forEach((freshInp, freshIdx) => {
+          const freshV = freshInp.value.trim().toUpperCase();
+          const rObj = selectedModel.rules[freshIdx];
+          if (!freshV || !validateFieldRule(freshV, rObj).isValid) {
+            stillGood = false;
+          }
+        });
+        if (stillGood) {
+          processRecebimentoSubmit();
+        }
+      }, 150);
+    }
+
   } else {
     card.className = 'bip-field-card invalid';
     feedback.className = 'rule-feedback invalid';
