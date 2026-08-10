@@ -236,11 +236,6 @@ async function handleLoginSubmit(e) {
   }
 }
 
-function quickLogin(username, password) {
-  document.getElementById('login-username').value = username;
-  document.getElementById('login-password').value = password;
-  handleLoginSubmit();
-}
 
 function loginUser(user) {
   appState.currentUser = user;
