@@ -18,39 +18,46 @@ let pool;
 async function initDbConnection() {
   const dbName = process.env.PGDATABASE || 'OLP_WEB';
   
-  // Try connecting to default postgres database to verify/create OLP_WEB
-  const mainClient = new Client({
-    host: process.env.PGHOST || 'localhost',
-    port: process.env.PGPORT || 5432,
-    user: process.env.PGUSER || 'postgres',
-    password: process.env.PGPASSWORD || 'postgres',
-    database: 'postgres'
-  });
+  if (process.env.DATABASE_URL) {
+    console.log("[Database] Utilizando string de conexão DATABASE_URL fornecida.");
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL
+    });
+  } else {
+    // Try connecting to default postgres database to verify/create OLP_WEB
+    const mainClient = new Client({
+      host: process.env.PGHOST || 'localhost',
+      port: process.env.PGPORT || 5432,
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || 'postgres',
+      database: 'postgres'
+    });
 
-  try {
-    await mainClient.connect();
-    const dbCheck = await mainClient.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
-    if (dbCheck.rowCount === 0) {
-      console.log(`[Database] Banco de dados "${dbName}" não encontrado. Criando...`);
-      await mainClient.query(`CREATE DATABASE "${dbName}"`);
-      console.log(`[Database] Banco de dados "${dbName}" criado com sucesso.`);
-    }
-  } catch (err) {
-    console.error("[Database] Erro ao conectar ao Postgres padrão para verificar banco de dados:", err.message);
-  } finally {
     try {
-      await mainClient.end();
-    } catch (e) {}
-  }
+      await mainClient.connect();
+      const dbCheck = await mainClient.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
+      if (dbCheck.rowCount === 0) {
+        console.log(`[Database] Banco de dados "${dbName}" não encontrado. Criando...`);
+        await mainClient.query(`CREATE DATABASE "${dbName}"`);
+        console.log(`[Database] Banco de dados "${dbName}" criado com sucesso.`);
+      }
+    } catch (err) {
+      console.error("[Database] Erro ao conectar ao Postgres padrão para verificar banco de dados:", err.message);
+    } finally {
+      try {
+        await mainClient.end();
+      } catch (e) {}
+    }
 
-  // Create Pool for our target Database
-  pool = new Pool({
-    host: process.env.PGHOST || 'localhost',
-    port: process.env.PGPORT || 5432,
-    user: process.env.PGUSER || 'postgres',
-    password: process.env.PGPASSWORD || 'postgres',
-    database: dbName
-  });
+    // Create Pool for our target Database
+    pool = new Pool({
+      host: process.env.PGHOST || 'localhost',
+      port: process.env.PGPORT || 5432,
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD || 'postgres',
+      database: dbName
+    });
+  }
 
   // Run schema.sql
   try {
