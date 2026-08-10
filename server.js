@@ -64,8 +64,45 @@ async function initDbConnection() {
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await pool.query(schemaSql);
     console.log("[Database] Tabelas inicializadas com sucesso a partir de schema.sql");
+
+    // Seed Users only if empty
+    const usersCount = await pool.query('SELECT COUNT(*) FROM users');
+    if (parseInt(usersCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO users (login, nome, role, senha) VALUES
+        ('RODRIGO.BARRETO', 'Rodrigo Barreto', 'ADMIN', '123'),
+        ('JOAO.SILVA', 'João Silva', 'OPERATOR', '123'),
+        ('MARIA.SANTOS', 'Maria Santos', 'OPERATOR', '123')
+      `);
+      console.log("[Database] Seed de usuários inserido.");
+    }
+
+    // Seed Models only if empty
+    const modelsCount = await pool.query('SELECT COUNT(*) FROM models');
+    if (parseInt(modelsCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO models (id, fabricante, nome, campos_count, rules) VALUES
+        ('MOD_1', 'HUAWEI', 'HG8145V5', 2, '[{"fieldName": "SERIAL", "lengthType": "EXACT", "exactLength": 12, "prefixes": "215008,2150"}, {"fieldName": "MAC", "lengthType": "EXACT", "exactLength": 12, "prefixes": ""}]'::jsonb),
+        ('MOD_2', 'ZTE', 'F670L', 3, '[{"fieldName": "SERIAL", "lengthType": "EXACT", "exactLength": 12, "prefixes": "ZTEG"}, {"fieldName": "GPON", "lengthType": "EXACT", "exactLength": 12, "prefixes": "48575443"}, {"fieldName": "MAC", "lengthType": "EXACT", "exactLength": 12, "prefixes": ""}]'::jsonb),
+        ('MOD_3', 'FIBERHOME', 'HG6245N', 1, '[{"fieldName": "SERIAL", "lengthType": "RANGE", "minLength": 10, "maxLength": 16, "prefixes": "FHTT"}]'::jsonb)
+      `);
+      console.log("[Database] Seed de modelos inserido.");
+    }
+
+    // Seed Locations only if empty
+    const locsCount = await pool.query('SELECT COUNT(*) FROM locations');
+    if (parseInt(locsCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO locations (id, nome, description) VALUES
+        ('LOC_1', 'DOCA 01', 'Doca Principal de Entrada'),
+        ('LOC_2', 'PRATELEIRA A1', 'Estoque Intermediário'),
+        ('LOC_3', 'BANCADA 02', 'Bancada de Testes Cosméticos')
+      `);
+      console.log("[Database] Seed de localidades inserido.");
+    }
+
   } catch (err) {
-    console.error("[Database] Erro ao carregar schema.sql:", err.message);
+    console.error("[Database] Erro ao carregar schema.sql ou semear dados:", err.message);
   }
 }
 
