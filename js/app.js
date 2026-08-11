@@ -2105,3 +2105,29 @@ function exportCurrentReportToExcel() {
 
   generateExcelFile(dataRows, `Relatorio_${subType.toUpperCase()}`, `Relatório ${subType}`);
 }
+
+async function resetAllUnits() {
+  if (!confirm("Tem certeza que deseja zerar todos os registros de unidades? Esta ação não pode ser desfeita.")) {
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/units', { method: 'DELETE' });
+    if (!res.ok) throw new Error("Erro ao limpar dados no servidor");
+    alert("Todos os registros foram zerados com sucesso no servidor!");
+  } catch (err) {
+    console.warn("Servidor indisponível ou erro no delete, limpando dados locais:", err);
+    localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify([]));
+    alert("Registros locais zerados com sucesso!");
+  }
+  
+  await loadStateFromServer();
+  
+  // Re-render dashboard or currently active view
+  const activeView = document.querySelector('.page-view.active');
+  if (activeView) {
+    const viewId = activeView.id.replace('view-', '');
+    if (viewId === 'dashboard') renderDashboard();
+    if (viewId === 'consulta') filterConsulta();
+  }
+}

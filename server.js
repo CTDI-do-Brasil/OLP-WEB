@@ -299,6 +299,15 @@ app.put('/api/units/:id', async (req, res) => {
   }
 });
 
+app.delete('/api/units', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM units');
+    res.json({ success: true, message: 'Todas as unidades foram removidas!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SCHEDULER
 function scheduleMidnightReset() {
   const now = new Date();
