@@ -29,6 +29,17 @@ async function initApp() {
   await loadStateFromServer();
   checkSession();
   setupEventListeners();
+
+  // Atualizar dashboard a cada 1 minuto
+  setInterval(async () => {
+    if (appState.currentUser) {
+      await loadStateFromServer();
+      const activeView = document.querySelector('.page-view.active');
+      if (activeView && activeView.id === 'view-dashboard') {
+        renderDashboard();
+      }
+    }
+  }, 60000);
 }
 
 if (document.readyState === 'loading') {
