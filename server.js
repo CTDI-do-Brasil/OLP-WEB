@@ -299,46 +299,10 @@ app.put('/api/units/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/units', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM units');
-    res.json({ success: true, message: 'Todas as unidades foram removidas!' });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// SCHEDULER
-function scheduleMidnightReset() {
-  const now = new Date();
-  const nextMidnight = new Date(now);
-  nextMidnight.setHours(24, 0, 0, 0);
-  const msToMidnight = nextMidnight.getTime() - now.getTime();
-
-  console.log(`[Scheduler] Agendando limpeza diária para 00:00 (em ${Math.round(msToMidnight / 1000 / 60)} minutos).`);
-
-  setTimeout(() => {
-    resetUnitsTable();
-    // Repetir a cada 24 horas
-    setInterval(resetUnitsTable, 24 * 60 * 60 * 1000);
-  }, msToMidnight);
-}
-
-async function resetUnitsTable() {
-  try {
-    console.log("[Scheduler] Zerando informações da tabela 'units' às 00:00.");
-    await pool.query('DELETE FROM units');
-    console.log("[Scheduler] Tabela 'units' zerada com sucesso.");
-  } catch (err) {
-    console.error("[Scheduler] Erro ao zerar tabela 'units':", err.message);
-  }
-}
-
 // STARTUP
 initDbConnection().then(() => {
   app.listen(PORT, () => {
     console.log(`[Server] Servidor rodando com sucesso no endereço: http://localhost:${PORT}`);
-    scheduleMidnightReset();
   });
 }).catch(err => {
   console.error("[Server] Erro crítico ao iniciar banco de dados:", err.message);

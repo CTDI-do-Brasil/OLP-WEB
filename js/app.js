@@ -379,7 +379,8 @@ function toggleTheme() {
    ========================================================================== */
 
 function renderDashboard() {
-  const units = appState.units;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const units = appState.units.filter(u => u.dataRecebimento && u.dataRecebimento.startsWith(todayStr));
 
   const totalRecebidos = units.length;
   const totalCosmeticos = units.filter(u => u.cosmetico).length;
@@ -414,10 +415,10 @@ function renderDashboard() {
   });
 
   // Render Charts
-  renderDashboardCharts();
+  renderDashboardCharts(units);
 }
 
-function renderDashboardCharts() {
+function renderDashboardCharts(units) {
   const ctx1 = document.getElementById('chart-fabricantes');
   const ctx2 = document.getElementById('chart-status');
 
@@ -446,7 +447,7 @@ function renderDashboardCharts() {
 
   // Chart 1: Recebimentos por Fabricante
   const fabCounts = {};
-  appState.units.forEach(u => {
+  units.forEach(u => {
     fabCounts[u.fabricante] = (fabCounts[u.fabricante] || 0) + 1;
   });
 
@@ -472,7 +473,7 @@ function renderDashboardCharts() {
 
   // Chart 2: Status dos Itens no Fluxo
   const statusCounts = { RECEBIDO: 0, INSPEÇÃO: 0, EMBALADO: 0, EXPEDIDO: 0 };
-  appState.units.forEach(u => {
+  units.forEach(u => {
     if (u.status === 'EXPEDIDO') statusCounts.EXPEDIDO++;
     else if (u.status === 'EMBALADO') statusCounts.EMBALADO++;
     else if (u.status.includes('OK') || u.status.includes('NOK')) statusCounts.INSPEÇÃO++;
@@ -2104,30 +2105,4 @@ function exportCurrentReportToExcel() {
   });
 
   generateExcelFile(dataRows, `Relatorio_${subType.toUpperCase()}`, `Relatório ${subType}`);
-}
-
-async function resetAllUnits() {
-  if (!confirm("Tem certeza que deseja zerar todos os registros de unidades? Esta ação não pode ser desfeita.")) {
-    return;
-  }
-  
-  try {
-    const res = await fetch('/api/units', { method: 'DELETE' });
-    if (!res.ok) throw new Error("Erro ao limpar dados no servidor");
-    alert("Todos os registros foram zerados com sucesso no servidor!");
-  } catch (err) {
-    console.warn("Servidor indisponível ou erro no delete, limpando dados locais:", err);
-    localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify([]));
-    alert("Registros locais zerados com sucesso!");
-  }
-  
-  await loadStateFromServer();
-  
-  // Re-render dashboard or currently active view
-  const activeView = document.querySelector('.page-view.active');
-  if (activeView) {
-    const viewId = activeView.id.replace('view-', '');
-    if (viewId === 'dashboard') renderDashboard();
-    if (viewId === 'consulta') filterConsulta();
-  }
 }
