@@ -1488,6 +1488,9 @@ function lookupUnitForCosmetico() {
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
   
   if (unit) {
+    if (unit.status === 'COSMETICO_NOK') {
+      alert("Aguardando embalagem");
+    }
     document.getElementById('cos-prev-fab').innerText = unit.fabricante;
     document.getElementById('cos-prev-mod').innerText = unit.modelo;
     document.getElementById('cos-prev-loc').innerText = unit.localidade;
@@ -1523,6 +1526,7 @@ async function saveApontamentoCosmetico(e) {
   const resVal = document.querySelector('input[name="cos-resultado"]:checked').value;
   const defeitosSelect = document.getElementById('cos-defeitos');
   const defeitos = Array.from(defeitosSelect.selectedOptions).map(o => o.value);
+  const defeitoConstatado = document.getElementById('cos-defeito-constatado').value.trim();
   const obs = document.getElementById('cos-obs').value;
 
   const now = new Date();
@@ -1531,6 +1535,7 @@ async function saveApontamentoCosmetico(e) {
   const cosmeticoData = {
     resultado: resVal,
     defeitos,
+    defeitoConstatado,
     obs,
     data: dateStr,
     operador: appState.currentUser.login
@@ -1985,7 +1990,7 @@ function openUnitTimelineModal(unitId) {
             <span><i class="fa-solid fa-sparkles"></i> COSMÉTICO: ${u.cosmetico.resultado}</span>
             <small class="text-muted">${u.cosmetico.data}</small>
           </div>
-          <p class="small">Apontado por: <b>${u.cosmetico.operador}</b>. Defeitos: ${u.cosmetico.defeitos.join(', ') || 'Nenhum'}</p>
+          <p class="small">Apontado por: <b>${u.cosmetico.operador}</b>. Defeitos: ${[...u.cosmetico.defeitos, u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || 'Nenhum'}</p>
         </div>
       </div>` : ''}
 
@@ -2162,7 +2167,7 @@ function renderRelatorioTable() {
           <td>${u.fabricante}</td>
           <td>${u.modelo}</td>
           <td><span class="badge ${u.cosmetico.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.cosmetico.resultado}</span></td>
-          <td>${u.cosmetico.defeitos.join(', ') || '-'}</td>
+          <td>${[...u.cosmetico.defeitos, u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || '-'}</td>
           <td>${u.cosmetico.obs || '-'}</td>
           <td>${u.cosmetico.operador}</td>
         </tr>
