@@ -59,13 +59,28 @@ async function initDbConnection() {
     });
   }
 
-  // Run schema.sql
-  try {
+    // Run schema.sql
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await pool.query(schemaSql);
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS sucata JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS reparo_eletronico JSONB');
-    console.log("[Database] Tabelas inicializadas com sucesso a partir de schema.sql");
+    
+    // Create sequence generators table for atomic sequences (concurrent safety)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sequence_generators (
+        name VARCHAR(100) PRIMARY KEY,
+        current_value INTEGER NOT NULL
+      )
+    `);
+    
+    // Insert default 'caixa_pallet' sequence if it doesn't exist
+    await pool.query(`
+      INSERT INTO sequence_generators (name, current_value)
+      VALUES ('caixa_pallet', 0)
+      ON CONFLICT (name) DO NOTHING
+    `);
+
+    console.log("[Database] Tabelas inicializadas com sucesso a partir de schema.sql e sequências configuradas");
 
     // Seed Users only if empty
     const usersCount = await pool.query('SELECT COUNT(*) FROM users');
@@ -435,6 +450,50 @@ app.delete('/api/defect-codes/:id', async (req, res) => {
     res.json({ success: true, message: 'Código removido!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// SEQUENCE GENERATION ENDPOINTS
+app.get('/api/sequence/caixa_pallet/current', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'caixa_pallet'");
+    const currentVal = result.rows[0] ? result.rows[0].current_value : 0;
+    // Format C00000001
+    const nextSeq = currentVal + 1;
+    const formatted = 'C' + String(nextSeq).padStart(8, '0');
+    res.json({ formatted, sequence: nextSeq });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sequence/caixa_pallet/next', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      "SELECT current_value FROM sequence_generators WHERE name = 'caixa_pallet' FOR UPDATE"
+    );
+    let nextVal = 1;
+    if (result.rows[0]) {
+      nextVal = result.rows[0].current_value + 1;
+      await client.query(
+        "UPDATE sequence_generators SET current_value = $1 WHERE name = 'caixa_pallet'",
+        [nextVal]
+      );
+    } else {
+      await client.query(
+        "INSERT INTO sequence_generators (name, current_value) VALUES ('caixa_pallet', 1)"
+      );
+    }
+    await client.query('COMMIT');
+    const formatted = 'C' + String(nextVal).padStart(8, '0');
+    res.json({ formatted, sequence: nextVal });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

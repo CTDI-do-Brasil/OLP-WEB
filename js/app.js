@@ -1940,42 +1940,51 @@ async function processEmbalarUnidade(e) {
    MENU PALLET (SEQUENTIAL PACKAGING)
    ========================================================================== */
 
-function getNextSequentialBoxCode() {
-  // Find all packaging box codes in appState units that match "C\d{8}"
-  let maxSeq = 0;
-  appState.units.forEach(u => {
-    if (u.embalagem && u.embalagem.caixaId) {
-      const code = u.embalagem.caixaId.toUpperCase();
-      if (/^C\d{8}$/.test(code)) {
-        const seq = parseInt(code.slice(1), 10);
-        if (seq > maxSeq) {
-          maxSeq = seq;
-        }
-      }
-    }
-  });
-  const nextSeq = maxSeq + 1;
-  return 'C' + String(nextSeq).padStart(8, '0');
+async function fetchCurrentPalletBoxCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/caixa_pallet/current');
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    return 'C00000001';
+  }
 }
 
-function initPalletView() {
+async function generateNextPalletBoxCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/caixa_pallet/next', { method: 'POST' });
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao gerar novo código de caixa no servidor!");
+    return null;
+  }
+}
+
+async function initPalletView() {
   const codeField = document.getElementById('pallet-caixa-id');
   if (codeField) {
-    // Determine the current active pallet box code
-    // Let's check if there is an active box code already filled, if not, compute next sequential one.
-    if (!codeField.value) {
-      codeField.value = getNextSequentialBoxCode();
-    }
+    codeField.placeholder = "Carregando...";
+    const code = await fetchCurrentPalletBoxCodeFromServer();
+    codeField.value = code;
     updatePalletBoxSummary();
   }
 }
 
-function generateNewPalletBoxCode() {
+async function generateNewPalletBoxCode() {
   const codeField = document.getElementById('pallet-caixa-id');
   if (codeField) {
-    codeField.value = getNextSequentialBoxCode();
-    updatePalletBoxSummary();
-    showToast("Novo lote/caixa sequencial gerado!");
+    codeField.placeholder = "Carregando...";
+    const code = await generateNextPalletBoxCodeFromServer();
+    if (code) {
+      codeField.value = code;
+      updatePalletBoxSummary();
+      showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
+    }
   }
 }
 
