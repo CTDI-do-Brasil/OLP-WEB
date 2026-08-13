@@ -59,6 +59,7 @@ async function initDbConnection() {
     });
   }
 
+  try {
     // Run schema.sql
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await pool.query(schemaSql);
