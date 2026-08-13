@@ -126,6 +126,11 @@
             </div>
           </div>
 
+          <a href="#reparo-eletronico" class="nav-item" onclick="navigate('reparo-eletronico')">
+            <i class="fa-solid fa-screwdriver-wrench"></i>
+            <span>Reparo Eletrônico</span>
+          </a>
+
           <a href="#embalagem" class="nav-item" onclick="navigate('embalagem')">
             <i class="fa-solid fa-box-open"></i>
             <span>Embalagem</span>
@@ -734,6 +739,75 @@
           </div>
         </section>
 
+        <!-- REPARO ELETRÔNICO VIEW -->
+        <section id="view-reparo-eletronico" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-screwdriver-wrench"></i> Apontamento de Reparo Eletrônico</h3>
+            </div>
+            <div class="card-body">
+              <form id="form-reparo" onsubmit="saveApontamentoReparo(event)">
+                <div class="form-group">
+                  <label for="rep-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade *</label>
+                  <input type="text" id="rep-serial" placeholder="Bipe o SERIAL da unidade..." required onchange="lookupUnitForReparo()">
+                </div>
+
+                <!-- UNIT DETAILS PREVIEW -->
+                <div id="rep-unit-preview" class="unit-preview-card hidden">
+                  <div class="preview-grid">
+                    <div><strong>Fabricante:</strong> <span id="rep-prev-fab">-</span></div>
+                    <div><strong>Modelo:</strong> <span id="rep-prev-mod">-</span></div>
+                    <div><strong>Localidade:</strong> <span id="rep-prev-loc">-</span></div>
+                    <div><strong>Status Atual:</strong> <span id="rep-prev-status" class="badge">-</span></div>
+                  </div>
+                </div>
+
+                <div class="grid-2col margin-top">
+                  <div class="form-group">
+                    <label for="rep-defeito"><i class="fa-solid fa-triangle-exclamation"></i> Defeito Constatado *</label>
+                    <input type="text" id="rep-defeito" placeholder="Ex: Curto na linha de entrada" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="rep-local"><i class="fa-solid fa-crosshairs"></i> Local Danificado *</label>
+                    <input type="text" id="rep-local" placeholder="Ex: Placa Fonte" required>
+                  </div>
+                </div>
+
+                <div class="grid-2col">
+                  <div class="form-group">
+                    <label for="rep-causa"><i class="fa-solid fa-circle-question"></i> Causa *</label>
+                    <input type="text" id="rep-causa" placeholder="Ex: Sobretensão na rede" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="rep-servico"><i class="fa-solid fa-gears"></i> Serviço Executado *</label>
+                    <input type="text" id="rep-servico" placeholder="Ex: Substituição de Varistor" required>
+                  </div>
+                </div>
+
+                <div class="grid-2col">
+                  <div class="form-group">
+                    <label for="rep-designator"><i class="fa-solid fa-microchip"></i> Referência Designator *</label>
+                    <input type="text" id="rep-designator" placeholder="Ex: U12, C45" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="form-group">
+                    <label for="rep-tecnico"><i class="fa-solid fa-user-gear"></i> Nome do Técnico *</label>
+                    <input type="text" id="rep-tecnico" placeholder="Ex: Rodrigo Barreto" required>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="rep-reparadora"><i class="fa-solid fa-industry"></i> Reparadora *</label>
+                  <input type="text" id="rep-reparadora" placeholder="Ex: CTDI" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                  <i class="fa-solid fa-floppy-disk"></i> Salvar Reparo Eletrônico
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <!-- 8. MENU EMBALAGEM VIEW -->
         <section id="view-embalagem" class="page-view">
           <div class="card glass-card">
@@ -890,6 +964,7 @@
                     <option value="EMBALADO">EMBALADO</option>
                     <option value="EXPEDIDO">EXPEDIDO</option>
                     <option value="SUCATA">SUCATA</option>
+                    <option value="REPARO_ELETRONICO">REPARO ELETRÔNICO</option>
                   </select>
                 </div>
 

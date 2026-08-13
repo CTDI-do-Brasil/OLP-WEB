@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS units (
   funcional JSONB,
   embalagem JSONB,
   expedicao JSONB,
-  sucata JSONB
+  sucata JSONB,
+  reparo_eletronico JSONB
 );
 
 

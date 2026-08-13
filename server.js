@@ -64,6 +64,7 @@ async function initDbConnection() {
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await pool.query(schemaSql);
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS sucata JSONB');
+    await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS reparo_eletronico JSONB');
     console.log("[Database] Tabelas inicializadas com sucesso a partir de schema.sql");
 
     // Seed Users only if empty
@@ -260,7 +261,8 @@ app.get('/api/units', async (req, res) => {
       funcional: row.funcional,
       embalagem: row.embalagem,
       expedicao: row.expedicao,
-      sucata: row.sucata
+      sucata: row.sucata,
+      reparo_eletronico: row.reparo_eletronico
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -283,7 +285,7 @@ app.post('/api/units', async (req, res) => {
 
 app.put('/api/units/:id', async (req, res) => {
   const { id } = req.params;
-  const { status, cosmetico, funcional, embalagem, expedicao, sucata } = req.body;
+  const { status, cosmetico, funcional, embalagem, expedicao, sucata, reparo_eletronico } = req.body;
   try {
     await pool.query(
       `UPDATE units SET 
@@ -292,9 +294,19 @@ app.put('/api/units/:id', async (req, res) => {
         funcional = COALESCE($3, funcional),
         embalagem = COALESCE($4, embalagem),
         expedicao = COALESCE($5, expedicao),
-        sucata = COALESCE($6, sucata)
-       WHERE id = $7`,
-      [status, cosmetico ? JSON.stringify(cosmetico) : null, funcional ? JSON.stringify(funcional) : null, embalagem ? JSON.stringify(embalagem) : null, expedicao ? JSON.stringify(expedicao) : null, sucata ? JSON.stringify(sucata) : null, id]
+        sucata = COALESCE($6, sucata),
+        reparo_eletronico = COALESCE($7, reparo_eletronico)
+       WHERE id = $8`,
+      [
+        status, 
+        cosmetico ? JSON.stringify(cosmetico) : null, 
+        funcional ? JSON.stringify(funcional) : null, 
+        embalagem ? JSON.stringify(embalagem) : null, 
+        expedicao ? JSON.stringify(expedicao) : null, 
+        sucata ? JSON.stringify(sucata) : null,
+        reparo_eletronico ? JSON.stringify(reparo_eletronico) : null,
+        id
+      ]
     );
     res.json({ success: true, message: 'Unidade atualizada!' });
   } catch (err) {

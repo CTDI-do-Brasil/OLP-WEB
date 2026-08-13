@@ -355,6 +355,7 @@ function updatePageTitle(viewId) {
     'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas in caixas' },
     'expedicao': { title: 'Módulo de Expedição', sub: 'Despacho e expedição de caixas e unidades' },
     'sucata': { title: 'Módulo de Sucata', sub: 'Registro e descarte de equipamentos avariados (sucateamento)' },
+    'reparo-eletronico': { title: 'Reparo Eletrônico', sub: 'Apontamento de reparo em placas e componentes' },
     'consulta': { title: 'Consulta de Unidades', sub: 'Rastreabilidade e linha do tempo de unidades' }
   };
 
@@ -504,6 +505,7 @@ function getStatusBadgeClass(status) {
   if (status === 'EXPEDIDO') return 'badge-purple';
   if (status === 'EMBALADO') return 'badge-success';
   if (status === 'SUCATA') return 'badge-danger';
+  if (status === 'REPARO_ELETRONICO') return 'badge-warning';
   if (status.includes('NOK')) return 'badge-danger';
   if (status.includes('OK')) return 'badge-warning';
   return 'badge-info';
@@ -1701,6 +1703,96 @@ async function saveApontamentoSucata(e) {
 }
 
 /* ==========================================================================
+   MENU REPARO ELETRÔNICO
+   ========================================================================== */
+
+function lookupUnitForReparo() {
+  const serial = document.getElementById('rep-serial').value.trim().toUpperCase();
+  const previewDiv = document.getElementById('rep-unit-preview');
+  
+  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+  
+  if (unit) {
+    document.getElementById('rep-prev-fab').innerText = unit.fabricante;
+    document.getElementById('rep-prev-mod').innerText = unit.modelo;
+    document.getElementById('rep-prev-loc').innerText = unit.localidade;
+    document.getElementById('rep-prev-status').innerText = unit.status;
+    previewDiv.classList.remove('hidden');
+
+    if (unit.status === 'REPARO_ELETRONICO') {
+      alert("apontamento cosmético");
+    }
+  } else {
+    previewDiv.classList.add('hidden');
+  }
+}
+
+async function saveApontamentoReparo(e) {
+  e.preventDefault();
+  const serial = document.getElementById('rep-serial').value.trim().toUpperCase();
+  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+
+  if (!unit) {
+    alert("Unidade não encontrada no recebimento! A unidade precisa estar recebida no sistema.");
+    return;
+  }
+
+  if (unit.status === 'REPARO_ELETRONICO') {
+    alert("apontamento cosmético");
+  }
+
+  const defeito = document.getElementById('rep-defeito').value;
+  const local = document.getElementById('rep-local').value;
+  const causa = document.getElementById('rep-causa').value;
+  const servico = document.getElementById('rep-servico').value;
+  const designator = document.getElementById('rep-designator').value;
+  const tecnico = document.getElementById('rep-tecnico').value;
+  const reparadora = document.getElementById('rep-reparadora').value;
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  const reparoData = {
+    defeito,
+    local,
+    causa,
+    servico,
+    designator,
+    tecnico,
+    reparadora,
+    data: dateStr,
+    operador: appState.currentUser.login
+  };
+  const targetStatus = 'REPARO_ELETRONICO';
+
+  try {
+    const res = await fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: targetStatus,
+        reparo_eletronico: reparoData
+      })
+    });
+    if (!res.ok) throw new Error("Erro de resposta");
+
+    unit.reparo_eletronico = reparoData;
+    unit.status = targetStatus;
+
+    document.getElementById('form-reparo').reset();
+    document.getElementById('rep-unit-preview').classList.add('hidden');
+    alert(`Reparo Eletrônico registrado com sucesso!`);
+    
+    if (document.getElementById('view-dashboard').classList.contains('active')) {
+      renderDashboard();
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao salvar reparo eletrônico no servidor!");
+  }
+}
+
+/* ==========================================================================
    MENU EMBALAGEM
    ========================================================================== */
 
@@ -1933,6 +2025,19 @@ function openUnitTimelineModal(unitId) {
             <small class="text-muted">${u.expedicao.data}</small>
           </div>
           <p class="small">Ordem <b>${u.expedicao.ordem}</b> enviada para <b>${u.expedicao.destino}</b> por <b>${u.expedicao.operador}</b>.</p>
+        </div>
+      </div>` : ''}
+
+      <!-- REPARO ELETRÔNICO -->
+      ${u.reparo_eletronico ? `
+      <div class="timeline-item timeline-warning">
+        <div class="timeline-dot bg-warning"></div>
+        <div class="timeline-content">
+          <div class="timeline-header">
+            <span class="text-warning"><i class="fa-solid fa-screwdriver-wrench"></i> REPARO ELETRÔNICO</span>
+            <small class="text-muted">${u.reparo_eletronico.data}</small>
+          </div>
+          <p class="small"><b>Defeito:</b> ${u.reparo_eletronico.defeito} | <b>Local:</b> ${u.reparo_eletronico.local} | <b>Causa:</b> ${u.reparo_eletronico.causa} | <b>Serviço:</b> ${u.reparo_eletronico.servico} | <b>Designator:</b> ${u.reparo_eletronico.designator} | <b>Técnico:</b> ${u.reparo_eletronico.tecnico} | <b>Reparadora:</b> ${u.reparo_eletronico.reparadora} (Operador: <b>${u.reparo_eletronico.operador}</b>)</p>
         </div>
       </div>` : ''}
 
