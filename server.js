@@ -63,6 +63,7 @@ async function initDbConnection() {
   try {
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
     await pool.query(schemaSql);
+    await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS sucata JSONB');
     console.log("[Database] Tabelas inicializadas com sucesso a partir de schema.sql");
 
     // Seed Users only if empty
@@ -258,7 +259,8 @@ app.get('/api/units', async (req, res) => {
       cosmetico: row.cosmetico,
       funcional: row.funcional,
       embalagem: row.embalagem,
-      expedicao: row.expedicao
+      expedicao: row.expedicao,
+      sucata: row.sucata
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -281,7 +283,7 @@ app.post('/api/units', async (req, res) => {
 
 app.put('/api/units/:id', async (req, res) => {
   const { id } = req.params;
-  const { status, cosmetico, funcional, embalagem, expedicao } = req.body;
+  const { status, cosmetico, funcional, embalagem, expedicao, sucata } = req.body;
   try {
     await pool.query(
       `UPDATE units SET 
@@ -289,9 +291,10 @@ app.put('/api/units/:id', async (req, res) => {
         cosmetico = COALESCE($2, cosmetico),
         funcional = COALESCE($3, funcional),
         embalagem = COALESCE($4, embalagem),
-        expedicao = COALESCE($5, expedicao)
-       WHERE id = $6`,
-      [status, cosmetico ? JSON.stringify(cosmetico) : null, funcional ? JSON.stringify(funcional) : null, embalagem ? JSON.stringify(embalagem) : null, expedicao ? JSON.stringify(expedicao) : null, id]
+        expedicao = COALESCE($5, expedicao),
+        sucata = COALESCE($6, sucata)
+       WHERE id = $7`,
+      [status, cosmetico ? JSON.stringify(cosmetico) : null, funcional ? JSON.stringify(funcional) : null, embalagem ? JSON.stringify(embalagem) : null, expedicao ? JSON.stringify(expedicao) : null, sucata ? JSON.stringify(sucata) : null, id]
     );
     res.json({ success: true, message: 'Unidade atualizada!' });
   } catch (err) {

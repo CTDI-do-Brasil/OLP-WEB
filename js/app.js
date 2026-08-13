@@ -352,8 +352,9 @@ function updatePageTitle(viewId) {
     'recebimento': { title: 'Recebimento de Unidades', sub: 'Entrada de equipamentos com validação rígida de regras' },
     'apontamento-cosmetico': { title: 'Apontamento Cosmético', sub: 'Inspeção estética e estática de unidades' },
     'apontamento-funcional': { title: 'Apontamento Funcional', sub: 'Testes de conectividade e hardware' },
-    'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas em caixas' },
+    'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas in caixas' },
     'expedicao': { title: 'Módulo de Expedição', sub: 'Despacho e expedição de caixas e unidades' },
+    'sucata': { title: 'Módulo de Sucata', sub: 'Registro e descarte de equipamentos avariados (sucateamento)' },
     'consulta': { title: 'Consulta de Unidades', sub: 'Rastreabilidade e linha do tempo de unidades' }
   };
 
@@ -502,6 +503,7 @@ function getStatusBadgeClass(status) {
   if (!status) return 'badge-info';
   if (status === 'EXPEDIDO') return 'badge-purple';
   if (status === 'EMBALADO') return 'badge-success';
+  if (status === 'SUCATA') return 'badge-danger';
   if (status.includes('NOK')) return 'badge-danger';
   if (status.includes('OK')) return 'badge-warning';
   return 'badge-info';
@@ -1488,6 +1490,13 @@ function lookupUnitForCosmetico() {
     document.getElementById('cos-prev-mod').innerText = unit.modelo;
     document.getElementById('cos-prev-loc').innerText = unit.localidade;
     document.getElementById('cos-prev-status').innerText = unit.status;
+    
+    const funcBadge = document.getElementById('cos-prev-func');
+    if (funcBadge) {
+      funcBadge.innerText = unit.funcional ? 'REALIZADO' : 'PENDENTE';
+      funcBadge.className = `badge ${unit.funcional ? 'badge-success' : 'badge-danger'}`;
+    }
+    
     previewDiv.classList.remove('hidden');
   } else {
     previewDiv.classList.add('hidden');
@@ -1500,7 +1509,12 @@ async function saveApontamentoCosmetico(e) {
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
 
   if (!unit) {
-    alert("Unidade não encontrada no recebimento!");
+    alert("Unidade não encontrada no recebimento! A unidade precisa estar recebida no sistema.");
+    return;
+  }
+
+  if (!unit.funcional) {
+    alert("Apontamento Cosmético só pode ser feito se o Apontamento Funcional correspondente já tiver sido realizado!");
     return;
   }
 
@@ -1611,6 +1625,78 @@ async function saveApontamentoFuncional(e) {
   } catch (err) {
     console.error(err);
     alert("Erro ao salvar apontamento funcional no servidor!");
+  }
+}
+
+/* ==========================================================================
+   MENU SUCATA
+   ========================================================================== */
+
+function lookupUnitForSucata() {
+  const serial = document.getElementById('suc-serial').value.trim().toUpperCase();
+  const previewDiv = document.getElementById('suc-unit-preview');
+  
+  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+  
+  if (unit) {
+    document.getElementById('suc-prev-fab').innerText = unit.fabricante;
+    document.getElementById('suc-prev-mod').innerText = unit.modelo;
+    document.getElementById('suc-prev-loc').innerText = unit.localidade;
+    document.getElementById('suc-prev-status').innerText = unit.status;
+    previewDiv.classList.remove('hidden');
+  } else {
+    previewDiv.classList.add('hidden');
+  }
+}
+
+async function saveApontamentoSucata(e) {
+  e.preventDefault();
+  const serial = document.getElementById('suc-serial').value.trim().toUpperCase();
+  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+
+  if (!unit) {
+    alert("Unidade não encontrada no recebimento! Apenas unidades já recebidas no sistema podem ser apontadas como sucata.");
+    return;
+  }
+
+  const motivo = document.getElementById('suc-motivo').value;
+  const obs = document.getElementById('suc-obs').value;
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  const sucataData = {
+    motivo,
+    obs,
+    data: dateStr,
+    operador: appState.currentUser.login
+  };
+  const targetStatus = 'SUCATA';
+
+  try {
+    const res = await fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: targetStatus,
+        sucata: sucataData
+      })
+    });
+    if (!res.ok) throw new Error("Erro de resposta");
+
+    unit.sucata = sucataData;
+    unit.status = targetStatus;
+
+    document.getElementById('form-sucata').reset();
+    document.getElementById('suc-unit-preview').classList.add('hidden');
+    alert(`Apontamento de Sucata registrado com sucesso!`);
+    
+    if (document.getElementById('view-dashboard').classList.contains('active')) {
+      renderDashboard();
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao salvar apontamento de sucata no servidor!");
   }
 }
 
@@ -1847,6 +1933,19 @@ function openUnitTimelineModal(unitId) {
             <small class="text-muted">${u.expedicao.data}</small>
           </div>
           <p class="small">Ordem <b>${u.expedicao.ordem}</b> enviada para <b>${u.expedicao.destino}</b> por <b>${u.expedicao.operador}</b>.</p>
+        </div>
+      </div>` : ''}
+
+      <!-- SUCATA -->
+      ${u.sucata ? `
+      <div class="timeline-item timeline-danger">
+        <div class="timeline-dot bg-danger"></div>
+        <div class="timeline-content">
+          <div class="timeline-header">
+            <span class="text-danger"><i class="fa-solid fa-trash-can"></i> SUCATEADO</span>
+            <small class="text-muted">${u.sucata.data}</small>
+          </div>
+          <p class="small">Apontado como sucata por: <b>${u.sucata.operador}</b>. Motivo: <b>${u.sucata.motivo}</b>. Obs: ${u.sucata.obs || 'Nenhuma'}</p>
         </div>
       </div>` : ''}
     </div>

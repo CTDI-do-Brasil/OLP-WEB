@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS units (
   cosmetico JSONB,
   funcional JSONB,
   embalagem JSONB,
-  expedicao JSONB
+  expedicao JSONB,
+  sucata JSONB
 );
 
 

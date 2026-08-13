@@ -135,6 +135,11 @@
             <i class="fa-solid fa-truck-fast"></i>
             <span>Expedição</span>
           </a>
+
+          <a href="#sucata" class="nav-item" onclick="navigate('sucata')">
+            <i class="fa-solid fa-trash-can"></i>
+            <span>Sucata</span>
+          </a>
         </div>
 
         <!-- CONSULTAS E RELATÓRIOS -->
@@ -608,13 +613,13 @@
                   <input type="text" id="cos-serial" placeholder="Bipe o SERIAL da unidade recebida..." required onchange="lookupUnitForCosmetico()">
                 </div>
 
-                <!-- UNIT DETAILS PREVIEW -->
                 <div id="cos-unit-preview" class="unit-preview-card hidden">
                   <div class="preview-grid">
                     <div><strong>Fabricante:</strong> <span id="cos-prev-fab">-</span></div>
                     <div><strong>Modelo:</strong> <span id="cos-prev-mod">-</span></div>
                     <div><strong>Localidade:</strong> <span id="cos-prev-loc">-</span></div>
                     <div><strong>Status Atual:</strong> <span id="cos-prev-status" class="badge">-</span></div>
+                    <div><strong>Apontamento Funcional:</strong> <span id="cos-prev-func" class="badge">-</span></div>
                   </div>
                 </div>
 
@@ -805,6 +810,54 @@
           </div>
         </section>
 
+        <!-- 8. SUCATA VIEW -->
+        <section id="view-sucata" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-trash-can"></i> Apontamento de Sucata</h3>
+            </div>
+            <div class="card-body">
+              <form id="form-sucata" onsubmit="saveApontamentoSucata(event)">
+                <div class="form-group">
+                  <label for="suc-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade *</label>
+                  <input type="text" id="suc-serial" placeholder="Bipe o SERIAL da unidade..." required onchange="lookupUnitForSucata()">
+                </div>
+
+                <!-- UNIT DETAILS PREVIEW -->
+                <div id="suc-unit-preview" class="unit-preview-card hidden">
+                  <div class="preview-grid">
+                    <div><strong>Fabricante:</strong> <span id="suc-prev-fab">-</span></div>
+                    <div><strong>Modelo:</strong> <span id="suc-prev-mod">-</span></div>
+                    <div><strong>Localidade:</strong> <span id="suc-prev-loc">-</span></div>
+                    <div><strong>Status Atual:</strong> <span id="suc-prev-status" class="badge">-</span></div>
+                  </div>
+                </div>
+
+                <div class="form-group margin-top">
+                  <label for="suc-motivo"><i class="fa-solid fa-triangle-exclamation"></i> Motivo do Sucateamento *</label>
+                  <select id="suc-motivo" required>
+                    <option value="">Selecione um motivo...</option>
+                    <option value="PLACA_QUEIMADA">Placa Principal Queimada / Curto-Circuito</option>
+                    <option value="CARCAÇA_DESTRUÍDA">Carcaça Destruída / Sem condições de uso</option>
+                    <option value="DANO_FÍSICO_GRAVE">Dano Físico Grave (Placa / Conectores)</option>
+                    <option value="OXIDAÇÃO_TOTAL">Oxidação Total por Líquidos</option>
+                    <option value="OUTROS">Outros Defeitos Irreparáveis</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label for="suc-obs">Observações do Apontamento</label>
+                  <textarea id="suc-obs" rows="2" placeholder="Insira detalhes adicionais sobre o sucateamento..."></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-danger btn-block">
+                  <i class="fa-solid fa-trash-can"></i> Salvar Apontamento de Sucata
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
         <!-- 10. MENU CONSULTA VIEW -->
         <section id="view-consulta" class="page-view">
           <div class="card glass-card">
@@ -836,6 +889,7 @@
                     <option value="FUNCIONAL_NOK">FUNCIONAL REPROVADO</option>
                     <option value="EMBALADO">EMBALADO</option>
                     <option value="EXPEDIDO">EXPEDIDO</option>
+                    <option value="SUCATA">SUCATA</option>
                   </select>
                 </div>
 
