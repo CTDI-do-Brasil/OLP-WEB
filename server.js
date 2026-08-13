@@ -414,6 +414,20 @@ app.post('/api/defect-codes', async (req, res) => {
   }
 });
 
+app.put('/api/defect-codes/:id', async (req, res) => {
+  const { id } = req.params;
+  const { codigo, descricao } = req.body;
+  try {
+    await pool.query(
+      'UPDATE defect_codes SET codigo = $1, descricao = $2 WHERE id = $3',
+      [codigo, descricao, id]
+    );
+    res.json({ success: true, message: 'Código atualizado!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/defect-codes/:id', async (req, res) => {
   const { id } = req.params;
   try {

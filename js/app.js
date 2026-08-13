@@ -2419,9 +2419,14 @@ function renderDefectTableFiltered() {
       <td><strong>${d.codigo}</strong></td>
       <td>${d.descricao || '-'}</td>
       <td>
-        <button class="btn btn-danger btn-sm" onclick="deleteDefectCode(${d.id})">
-          <i class="fa-solid fa-trash"></i> Excluir
-        </button>
+        <div style="display: flex; gap: 4px;">
+          <button class="btn btn-warning btn-sm" onclick="editDefectCode(${d.id})">
+            <i class="fa-solid fa-pen-to-square"></i> Editar
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteDefectCode(${d.id})">
+            <i class="fa-solid fa-trash"></i> Excluir
+          </button>
+        </div>
       </td>
     `;
     tbody.appendChild(tr);
@@ -2440,32 +2445,81 @@ async function saveDefectManual(e) {
 
   if (!codigo) return;
 
-  const newDefect = { categoria, codigo, descricao };
-
   try {
-    const res = await fetch('/api/defect-codes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newDefect)
-    });
-    if (!res.ok) throw new Error("Erro de resposta");
+    if (appState.editingDefectId) {
+      // UPDATE existing defect code
+      const res = await fetch(`/api/defect-codes/${appState.editingDefectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ codigo, descricao })
+      });
+      if (!res.ok) throw new Error("Erro de resposta");
+      alert("Código atualizado com sucesso!");
+    } else {
+      // CREATE new defect code
+      const newDefect = { categoria, codigo, descricao };
+      const res = await fetch('/api/defect-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDefect)
+      });
+      if (!res.ok) throw new Error("Erro de resposta");
+      alert("Código cadastrado com sucesso!");
+    }
 
     // Refresh state from server
     const defectsRes = await fetch('/api/defect-codes');
     if (defectsRes.ok) {
       appState.defectCodes = await defectsRes.json();
-    } else {
-      appState.defectCodes = appState.defectCodes.filter(d => !(d.categoria === categoria && d.codigo === codigo));
-      appState.defectCodes.push({ id: Date.now(), ...newDefect });
     }
 
+    cancelDefectEdit();
     renderDefectTableFiltered();
     populateSelectDropdowns();
-    document.getElementById('form-cadastro-defeito').reset();
-    alert("Código cadastrado com sucesso!");
   } catch (err) {
     console.error(err);
-    alert("Erro ao cadastrar código de defeito no servidor!");
+    alert("Erro ao salvar código de defeito no servidor!");
+  }
+}
+
+function editDefectCode(id) {
+  const defect = appState.defectCodes.find(d => d.id === id);
+  if (!defect) return;
+
+  appState.editingDefectId = id;
+  document.getElementById('def-codigo').value = defect.codigo;
+  document.getElementById('def-descricao').value = defect.descricao || '';
+  
+  const submitBtn = document.querySelector('#form-cadastro-defeito button[type="submit"]');
+  submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Alterações';
+  submitBtn.className = "btn btn-warning btn-block";
+  
+  let cancelBtn = document.getElementById('btn-cancel-edit-defect');
+  if (!cancelBtn) {
+    cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.id = 'btn-cancel-edit-defect';
+    cancelBtn.className = 'btn btn-secondary btn-block';
+    cancelBtn.style.marginTop = '8px';
+    cancelBtn.innerHTML = '<i class="fa-solid fa-xmark"></i> Cancelar Edição';
+    cancelBtn.onclick = cancelDefectEdit;
+    submitBtn.parentNode.appendChild(cancelBtn);
+  }
+  
+  document.getElementById('form-cadastro-defeito').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelDefectEdit() {
+  appState.editingDefectId = null;
+  document.getElementById('form-cadastro-defeito').reset();
+  
+  const submitBtn = document.querySelector('#form-cadastro-defeito button[type="submit"]');
+  submitBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Cadastrar Código';
+  submitBtn.className = "btn btn-primary btn-block";
+  
+  const cancelBtn = document.getElementById('btn-cancel-edit-defect');
+  if (cancelBtn) {
+    cancelBtn.remove();
   }
 }
 
@@ -2478,6 +2532,9 @@ async function deleteDefectCode(id) {
       appState.defectCodes = appState.defectCodes.filter(d => d.id !== id);
       renderDefectTableFiltered();
       populateSelectDropdowns();
+      if (appState.editingDefectId === id) {
+        cancelDefectEdit();
+      }
     } catch (err) {
       console.error(err);
       alert("Erro ao remover código de defeito do servidor!");
