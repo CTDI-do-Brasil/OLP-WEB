@@ -172,10 +172,24 @@
             <span>Reparo Eletrônico</span>
           </a>
 
-          <a href="#embalagem" class="nav-item" onclick="navigate('embalagem')">
-            <i class="fa-solid fa-box-open"></i>
-            <span>Embalagem</span>
-          </a>
+          <!-- EMBALAGEM WITH SUBMENUS -->
+          <div class="nav-accordion">
+            <div class="nav-item accordion-header" onclick="toggleAccordion('embalagem-submenu')">
+              <i class="fa-solid fa-box-open"></i>
+              <span>Embalagem</span>
+              <i class="fa-solid fa-chevron-down accordion-icon"></i>
+            </div>
+            <div class="accordion-content hidden" id="embalagem-submenu">
+              <a href="#embalagem" class="nav-item nav-sub" onclick="navigate('embalagem')">
+                <i class="fa-solid fa-box"></i>
+                <span>Formar Caixa</span>
+              </a>
+              <a href="#embalagem-pallet" class="nav-item nav-sub" onclick="navigate('embalagem-pallet')">
+                <i class="fa-solid fa-pallet"></i>
+                <span>Pallet</span>
+              </a>
+            </div>
+          </div>
 
           <a href="#expedicao" class="nav-item" onclick="navigate('expedicao')">
             <i class="fa-solid fa-truck-fast"></i>
@@ -961,6 +975,62 @@
                     <strong id="current-box-count">0</strong>
                   </div>
                   <div class="box-unit-list" id="current-box-units">
+                    <p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 8.5 MENU PALLET VIEW -->
+        <section id="view-embalagem-pallet" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-pallet"></i> Processo de Embalagem - Pallet</h3>
+            </div>
+            <div class="card-body">
+              <div class="grid-2col">
+                <div>
+                  <form id="form-pallet" onsubmit="processPalletUnidade(event)">
+                    <div class="form-group">
+                      <label for="pallet-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
+                      <div class="flex-row">
+                        <input type="text" id="pallet-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
+                        <button type="button" class="btn btn-secondary" onclick="generateNewPalletBoxCode()">Nova Caixa</button>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="pallet-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade *</label>
+                      <input type="text" id="pallet-serial" placeholder="Bipe o SERIAL da unidade para embalar..." required>
+                    </div>
+
+                    <button type="submit" class="btn btn-success btn-block">
+                      <i class="fa-solid fa-box-archive"></i> Embalar no Pallet
+                    </button>
+                  </form>
+                </div>
+
+                <div class="box-status-card">
+                  <h4><i class="fa-solid fa-boxes-stacked"></i> Resumo da Caixa Pallet Atual</h4>
+                  <div class="box-stat-item">
+                    <span>Código da Caixa:</span>
+                    <strong id="pallet-box-code">C00000001</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Modelo de Referência:</span>
+                    <strong id="pallet-box-modelo">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Localidade de Referência:</span>
+                    <strong id="pallet-box-localidade">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Unidades na Caixa:</span>
+                    <strong id="pallet-box-count">0</strong>
+                  </div>
+                  <div class="box-unit-list" id="pallet-box-units">
                     <p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>
                   </div>
                 </div>

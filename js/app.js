@@ -355,6 +355,7 @@ function navigate(viewId) {
   if (viewId === 'cadastro-localidade') renderLocalidadesTable();
   if (viewId === 'recebimento') resetRecebimentoForm();
   if (viewId === 'consulta') filterConsulta();
+  if (viewId === 'embalagem-pallet') initPalletView();
 }
 
 function updatePageTitle(viewId) {
@@ -367,6 +368,7 @@ function updatePageTitle(viewId) {
     'apontamento-cosmetico': { title: 'Apontamento Cosmético', sub: 'Inspeção estética e estática de unidades' },
     'apontamento-funcional': { title: 'Apontamento Funcional', sub: 'Testes de conectividade e hardware' },
     'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas in caixas' },
+    'embalagem-pallet': { title: 'Processo de Embalagem - Pallet', sub: 'Embalagem rígida por lote com validação de modelo, localidade e etapas' },
     'expedicao': { title: 'Módulo de Expedição', sub: 'Despacho e expedição de caixas e unidades' },
     'sucata': { title: 'Módulo de Sucata', sub: 'Registro e descarte de equipamentos avariados (sucateamento)' },
     'reparo-eletronico': { title: 'Reparo Eletrônico', sub: 'Apontamento de reparo em placas e componentes' },
@@ -1928,6 +1930,173 @@ async function processEmbalarUnidade(e) {
         </div>
       `;
     });
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao salvar embalagem no servidor!");
+  }
+}
+
+/* ==========================================================================
+   MENU PALLET (SEQUENTIAL PACKAGING)
+   ========================================================================== */
+
+function getNextSequentialBoxCode() {
+  // Find all packaging box codes in appState units that match "C\d{8}"
+  let maxSeq = 0;
+  appState.units.forEach(u => {
+    if (u.embalagem && u.embalagem.caixaId) {
+      const code = u.embalagem.caixaId.toUpperCase();
+      if (/^C\d{8}$/.test(code)) {
+        const seq = parseInt(code.slice(1), 10);
+        if (seq > maxSeq) {
+          maxSeq = seq;
+        }
+      }
+    }
+  });
+  const nextSeq = maxSeq + 1;
+  return 'C' + String(nextSeq).padStart(8, '0');
+}
+
+function initPalletView() {
+  const codeField = document.getElementById('pallet-caixa-id');
+  if (codeField) {
+    // Determine the current active pallet box code
+    // Let's check if there is an active box code already filled, if not, compute next sequential one.
+    if (!codeField.value) {
+      codeField.value = getNextSequentialBoxCode();
+    }
+    updatePalletBoxSummary();
+  }
+}
+
+function generateNewPalletBoxCode() {
+  const codeField = document.getElementById('pallet-caixa-id');
+  if (codeField) {
+    codeField.value = getNextSequentialBoxCode();
+    updatePalletBoxSummary();
+    showToast("Novo lote/caixa sequencial gerado!");
+  }
+}
+
+function updatePalletBoxSummary() {
+  const caixaId = document.getElementById('pallet-caixa-id').value.trim().toUpperCase();
+  document.getElementById('pallet-box-code').innerText = caixaId || 'C00000001';
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  document.getElementById('pallet-box-count').innerText = boxUnits.length;
+
+  const modeloRefEl = document.getElementById('pallet-box-modelo');
+  const localidadeRefEl = document.getElementById('pallet-box-localidade');
+  const unitsContainer = document.getElementById('pallet-box-units');
+
+  if (boxUnits.length > 0) {
+    const refUnit = boxUnits[0];
+    modeloRefEl.innerText = refUnit.modelo;
+    localidadeRefEl.innerText = refUnit.localidade;
+
+    unitsContainer.innerHTML = '';
+    boxUnits.forEach(u => {
+      unitsContainer.innerHTML += `
+        <div class="box-unit-chip">
+          <span>${u.serial}</span>
+          <span class="badge badge-success">${u.modelo}</span>
+          <small class="text-muted" style="margin-left:8px;">${u.localidade}</small>
+        </div>
+      `;
+    });
+  } else {
+    modeloRefEl.innerText = '-';
+    localidadeRefEl.innerText = '-';
+    unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>';
+  }
+}
+
+async function processPalletUnidade(e) {
+  e.preventDefault();
+  const caixaId = document.getElementById('pallet-caixa-id').value.trim().toUpperCase();
+  const serial = document.getElementById('pallet-serial').value.trim().toUpperCase();
+
+  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+
+  if (!unit) {
+    alert("Erro: Registro de recebimento não executado! A unidade precisa estar recebida no sistema.");
+    return;
+  }
+
+  // 1. Check all required steps
+  // Required:
+  // - Registro de recebimento (implicitly checked as unit exists)
+  // - Teste funcional ou reparo finalizado.
+  // - Apontamento cosmético.
+  // We need to show which steps are missing if any.
+  const missingSteps = [];
+  
+  // Teste funcional ou reparo
+  const hasFuncional = !!unit.funcional;
+  const hasReparo = !!unit.reparo_eletronico;
+  if (!hasFuncional && !hasReparo) {
+    missingSteps.push("Teste Funcional ou Reparo Eletrônico");
+  }
+
+  // Apontamento cosmético
+  const hasCosmetico = !!unit.cosmetico;
+  if (!hasCosmetico) {
+    missingSteps.push("Apontamento Cosmético");
+  }
+
+  if (missingSteps.length > 0) {
+    alert(`Não é possível realizar a embalagem. Etapa(s) faltante(s): \n- ${missingSteps.join('\n- ')}`);
+    return;
+  }
+
+  // Check if unit is rejected
+  if (unit.status.includes('NOK')) {
+    alert("Unidade com apontamento REPROVADO não pode ser embalada!");
+    return;
+  }
+
+  // 2. Validate same model and same location (referencing the receiving step: unit.modelo & unit.localidade)
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  if (boxUnits.length > 0) {
+    const firstUnit = boxUnits[0];
+    if (unit.modelo !== firstUnit.modelo) {
+      alert(`Erro: A caixa só aceita unidades do mesmo modelo (${firstUnit.modelo}). Esta unidade é do modelo ${unit.modelo}.`);
+      return;
+    }
+    if (unit.localidade !== firstUnit.localidade) {
+      alert(`Erro: A caixa só aceita unidades da mesma localidade (${firstUnit.localidade}). Esta unidade é da localidade ${unit.localidade}.`);
+      return;
+    }
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  const embalagemData = {
+    caixaId,
+    data: dateStr,
+    operador: appState.currentUser.login
+  };
+
+  try {
+    const res = await fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'EMBALADO',
+        embalagem: embalagemData
+      })
+    });
+    if (!res.ok) throw new Error("Erro de resposta");
+
+    unit.embalagem = embalagemData;
+    unit.status = 'EMBALADO';
+
+    document.getElementById('pallet-serial').value = '';
+
+    updatePalletBoxSummary();
+    showToast(`Unidade ${unit.serial} embalada no Pallet com sucesso!`);
   } catch (err) {
     console.error(err);
     alert("Erro ao salvar embalagem no servidor!");
