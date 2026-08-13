@@ -44,4 +44,14 @@ CREATE TABLE IF NOT EXISTS units (
   reparo_eletronico JSONB
 );
 
+-- 5. Defect Codes Table
+CREATE TABLE IF NOT EXISTS defect_codes (
+  id SERIAL PRIMARY KEY,
+  categoria VARCHAR(100) NOT NULL,
+  codigo VARCHAR(100) NOT NULL,
+  descricao VARCHAR(255),
+  CONSTRAINT unique_category_code UNIQUE (categoria, codigo)
+);
+
+
 

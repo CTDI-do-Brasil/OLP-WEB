@@ -19,8 +19,10 @@ let appState = {
   models: [],
   locations: [],
   units: [],
+  defectCodes: [],
   currentRecebimentoSession: [],
   currentReportSubmenu: 'recebimento',
+  currentDefectCategory: 'cosmetico',
   charts: {}
 };
 
@@ -50,14 +52,15 @@ if (document.readyState === 'loading') {
 
 async function loadStateFromServer() {
   try {
-    const [usersRes, modelsRes, locationsRes, unitsRes] = await Promise.all([
+    const [usersRes, modelsRes, locationsRes, unitsRes, defectsRes] = await Promise.all([
       fetch('/api/users'),
       fetch('/api/models'),
       fetch('/api/locations'),
-      fetch('/api/units')
+      fetch('/api/units'),
+      fetch('/api/defect-codes')
     ]);
 
-    if (!usersRes.ok || !modelsRes.ok || !locationsRes.ok || !unitsRes.ok) {
+    if (!usersRes.ok || !modelsRes.ok || !locationsRes.ok || !unitsRes.ok || !defectsRes.ok) {
       throw new Error("HTTP error retrieving state");
     }
 
@@ -65,8 +68,10 @@ async function loadStateFromServer() {
     appState.models = await modelsRes.json();
     appState.locations = await locationsRes.json();
     appState.units = await unitsRes.json();
+    appState.defectCodes = await defectsRes.json();
   } catch (e) {
     console.warn("Erro ao carregar dados do servidor, utilizando fallback local:", e);
+    appState.defectCodes = [];
     // Fallback locally
     try {
       const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
@@ -299,7 +304,7 @@ function checkSession() {
 
 function navigate(viewId) {
   // Check permission for admin views
-  if (['dashboard', 'cadastro-modelo', 'cadastro-usuario', 'cadastro-localidade'].includes(viewId)) {
+  if (['dashboard', 'cadastro-modelo', 'cadastro-usuario', 'cadastro-localidade'].includes(viewId) || viewId.startsWith('cadastro-defeito-')) {
     if (appState.currentUser.role !== 'ADMIN') {
       alert("Acesso restrito para administradores!");
       return;
@@ -316,6 +321,15 @@ function navigate(viewId) {
     appState.currentReportSubmenu = subType;
     document.getElementById('view-relatorios').classList.add('active');
     setupRelatorioView(subType);
+    return;
+  }
+
+  // Handle Cadastro Defeito Submenu Routing
+  if (viewId.startsWith('cadastro-defeito-')) {
+    const subType = viewId.replace('cadastro-defeito-', '');
+    appState.currentDefectCategory = subType;
+    document.getElementById('view-cadastro-defeito').classList.add('active');
+    setupCadastroDefeitoView(subType);
     return;
   }
 
@@ -359,7 +373,20 @@ function updatePageTitle(viewId) {
     'consulta': { title: 'Consulta de Unidades', sub: 'Rastreabilidade e linha do tempo de unidades' }
   };
 
-  const info = titles[viewId] || { title: 'WMS Recebimento', sub: '' };
+  let info = titles[viewId];
+  if (!info && viewId.startsWith('cadastro-defeito-')) {
+    const catClean = viewId.replace('cadastro-defeito-', '');
+    const catName = catClean.replace('_', ' ').toUpperCase();
+    info = {
+      title: `Código de Defeito: ${catName}`,
+      sub: `Gerenciamento de códigos e importações da categoria ${catClean.toLowerCase()}`
+    };
+  }
+
+  if (!info) {
+    info = { title: 'WMS Recebimento', sub: '' };
+  }
+  
   document.getElementById('page-title').innerText = info.title;
   document.getElementById('page-subtitle').innerText = info.sub;
 }
@@ -1050,6 +1077,49 @@ function populateSelectDropdowns() {
     const fabs = [...new Set(appState.models.map(m => m.fabricante))];
     relFab.innerHTML = '<option value="">TODOS OS FABRICANTES</option>';
     fabs.forEach(f => relFab.innerHTML += `<option value="${f}">${f}</option>`);
+  }
+
+  // Populate Defect Codes Selects
+  if (appState.defectCodes) {
+    // 1. Cosméticos: <select id="cos-defeitos" multiple>
+    const cosDefSelect = document.getElementById('cos-defeitos');
+    if (cosDefSelect) {
+      cosDefSelect.innerHTML = '';
+      appState.defectCodes
+        .filter(d => d.categoria === 'cosmetico')
+        .forEach(d => {
+          const opt = document.createElement('option');
+          opt.value = d.codigo;
+          opt.innerText = d.descricao ? `${d.codigo} - ${d.descricao}` : d.codigo;
+          cosDefSelect.appendChild(opt);
+        });
+    }
+
+    // 2. Electronic Repair Selects
+    const mapCategoryToSelectId = {
+      'defeito_constatado': 'rep-defeito',
+      'local_danificado': 'rep-local',
+      'causa': 'rep-causa',
+      'servico_executado': 'rep-servico',
+      'referencia_designator': 'rep-designator',
+      'nome_tecnico': 'rep-tecnico',
+      'reparadora': 'rep-reparadora'
+    };
+
+    Object.entries(mapCategoryToSelectId).forEach(([category, selectId]) => {
+      const selectEl = document.getElementById(selectId);
+      if (selectEl) {
+        selectEl.innerHTML = '<option value="">Selecione...</option>';
+        appState.defectCodes
+          .filter(d => d.categoria === category)
+          .forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.codigo;
+            opt.innerText = d.descricao ? `${d.codigo} - ${d.descricao}` : d.codigo;
+            selectEl.appendChild(opt);
+          });
+      }
+    });
   }
 }
 
@@ -2314,4 +2384,179 @@ function exportCurrentReportToExcel() {
   });
 
   generateExcelFile(dataRows, `Relatorio_${subType.toUpperCase()}`, `Relatório ${subType}`);
+}
+
+/* ==========================================================================
+   CADASTRO DE CÓDIGO DE DEFEITO - LOGIC AND EXCEL IMPORT
+   ========================================================================== */
+
+function setupCadastroDefeitoView(category) {
+  const catTitle = category.replace('_', ' ').toUpperCase();
+  document.getElementById('defect-table-title').innerHTML = `<i class="fa-solid fa-list"></i> Códigos Cadastrados (${catTitle})`;
+  
+  document.getElementById('defect-search').value = '';
+  document.getElementById('defeito-excel-file').value = '';
+  document.getElementById('form-cadastro-defeito').reset();
+
+  renderDefectTableFiltered();
+}
+
+function renderDefectTableFiltered() {
+  const tbody = document.getElementById('table-defeitos-body');
+  tbody.innerHTML = '';
+
+  const currentCat = appState.currentDefectCategory;
+  const filtered = appState.defectCodes.filter(d => d.categoria === currentCat);
+  const searchVal = document.getElementById('defect-search').value.toLowerCase().trim();
+
+  filtered.forEach(d => {
+    if (searchVal && !d.codigo.toLowerCase().includes(searchVal) && !(d.descricao || '').toLowerCase().includes(searchVal)) {
+      return;
+    }
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${d.codigo}</strong></td>
+      <td>${d.descricao || '-'}</td>
+      <td>
+        <button class="btn btn-danger btn-sm" onclick="deleteDefectCode(${d.id})">
+          <i class="fa-solid fa-trash"></i> Excluir
+        </button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function filterDefectTable() {
+  renderDefectTableFiltered();
+}
+
+async function saveDefectManual(e) {
+  e.preventDefault();
+  const codigo = document.getElementById('def-codigo').value.trim().toUpperCase();
+  const descricao = document.getElementById('def-descricao').value.trim();
+  const categoria = appState.currentDefectCategory;
+
+  if (!codigo) return;
+
+  const newDefect = { categoria, codigo, descricao };
+
+  try {
+    const res = await fetch('/api/defect-codes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newDefect)
+    });
+    if (!res.ok) throw new Error("Erro de resposta");
+
+    // Refresh state from server
+    const defectsRes = await fetch('/api/defect-codes');
+    if (defectsRes.ok) {
+      appState.defectCodes = await defectsRes.json();
+    } else {
+      appState.defectCodes = appState.defectCodes.filter(d => !(d.categoria === categoria && d.codigo === codigo));
+      appState.defectCodes.push({ id: Date.now(), ...newDefect });
+    }
+
+    renderDefectTableFiltered();
+    populateSelectDropdowns();
+    document.getElementById('form-cadastro-defeito').reset();
+    alert("Código cadastrado com sucesso!");
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao cadastrar código de defeito no servidor!");
+  }
+}
+
+async function deleteDefectCode(id) {
+  if (confirm("Excluir este código de defeito?")) {
+    try {
+      const res = await fetch(`/api/defect-codes/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error("Erro de resposta");
+
+      appState.defectCodes = appState.defectCodes.filter(d => d.id !== id);
+      renderDefectTableFiltered();
+      populateSelectDropdowns();
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover código de defeito do servidor!");
+    }
+  }
+}
+
+function importDefectsFromExcel() {
+  const fileInput = document.getElementById('defeito-excel-file');
+  const file = fileInput.files[0];
+  if (!file) {
+    alert("Por favor, selecione um arquivo Excel primeiro.");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      
+      const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      if (rows.length === 0) {
+        alert("A planilha está vazia!");
+        return;
+      }
+
+      const category = appState.currentDefectCategory;
+      const defectsToImport = [];
+
+      let startIdx = 0;
+      const firstRowVal = String(rows[0][0] || '').toLowerCase();
+      if (firstRowVal.includes('cod') || firstRowVal.includes('nome') || firstRowVal.includes('key')) {
+        startIdx = 1;
+      }
+
+      for (let i = startIdx; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+        const codigo = String(row[0] || '').trim().toUpperCase();
+        const descricao = String(row[1] || '').trim();
+
+        if (codigo) {
+          defectsToImport.push({
+            categoria: category,
+            codigo,
+            descricao
+          });
+        }
+      }
+
+      if (defectsToImport.length === 0) {
+        alert("Nenhum código válido encontrado na planilha.");
+        return;
+      }
+
+      const res = await fetch('/api/defect-codes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(defectsToImport)
+      });
+
+      if (!res.ok) throw new Error("Erro ao importar lote");
+
+      const defectsRes = await fetch('/api/defect-codes');
+      if (defectsRes.ok) {
+        appState.defectCodes = await defectsRes.json();
+      }
+
+      renderDefectTableFiltered();
+      populateSelectDropdowns();
+      fileInput.value = '';
+      alert(`${defectsToImport.length} códigos importados com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao ler ou processar planilha Excel: " + err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }

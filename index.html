@@ -96,6 +96,47 @@
             <i class="fa-solid fa-warehouse"></i>
             <span>Localidades</span>
           </a>
+
+          <!-- CÓDIGOS DE DEFEITO Accordion -->
+          <div class="nav-accordion">
+            <div class="nav-item accordion-header" onclick="toggleAccordion('cadastro-defeito-submenu')">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>Códigos de Defeito</span>
+              <i class="fa-solid fa-chevron-down accordion-icon"></i>
+            </div>
+            <div class="accordion-content hidden" id="cadastro-defeito-submenu">
+              <a href="#cadastro-defeito-cosmetico" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-cosmetico')">
+                <i class="fa-solid fa-sparkles"></i> Cosmético
+              </a>
+              <a href="#cadastro-defeito-funcional" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-defeito_funcional')">
+                <i class="fa-solid fa-plug-circle-check"></i> Defeito Funcional
+              </a>
+              <a href="#cadastro-defeito-bom" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-bom')">
+                <i class="fa-solid fa-list-check"></i> BOM
+              </a>
+              <a href="#cadastro-defeito-constatado" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-defeito_constatado')">
+                <i class="fa-solid fa-bug"></i> Defeito Constatado
+              </a>
+              <a href="#cadastro-defeito-local" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-local_danificado')">
+                <i class="fa-solid fa-crosshairs"></i> Local Danificado
+              </a>
+              <a href="#cadastro-defeito-causa" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-causa')">
+                <i class="fa-solid fa-circle-question"></i> Causa
+              </a>
+              <a href="#cadastro-defeito-servico" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-servico_executado')">
+                <i class="fa-solid fa-gears"></i> Serviço Executado
+              </a>
+              <a href="#cadastro-defeito-designator" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-referencia_designator')">
+                <i class="fa-solid fa-microchip"></i> Ref. Designator
+              </a>
+              <a href="#cadastro-defeito-tecnico" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-nome_tecnico')">
+                <i class="fa-solid fa-user-gear"></i> Nome do Técnico
+              </a>
+              <a href="#cadastro-defeito-reparadora" class="nav-item nav-sub" onclick="navigate('cadastro-defeito-reparadora')">
+                <i class="fa-solid fa-industry"></i> Reparadora
+              </a>
+            </div>
+          </div>
         </div>
 
         <!-- OPERAÇÃO -->
@@ -512,6 +553,69 @@
           </div>
         </section>
 
+        <!-- 4.1 CADASTRO DE CÓDIGO DE DEFEITO VIEW (ADMIN) -->
+        <section id="view-cadastro-defeito" class="page-view">
+          <div class="grid-2col">
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-file-excel"></i> Importar via Excel (.xlsx / .xls)</h3>
+              </div>
+              <div class="card-body">
+                <div class="form-group">
+                  <label for="defeito-excel-file"><i class="fa-solid fa-file-import"></i> Selecione a Planilha</label>
+                  <input type="file" id="defeito-excel-file" accept=".xlsx, .xls">
+                  <p class="small text-muted margin-top-sm">A planilha deve conter o código na primeira coluna e a descrição (opcional) na segunda coluna.</p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-block" onclick="importDefectsFromExcel()">
+                  <i class="fa-solid fa-upload"></i> Processar e Importar Excel
+                </button>
+              </div>
+              
+              <div class="card-header" style="border-top: 1px solid rgba(255, 255, 255, 0.1); margin-top: 20px; padding-top: 20px;">
+                <h3><i class="fa-solid fa-pen-to-square"></i> Cadastro Manual</h3>
+              </div>
+              <div class="card-body">
+                <form id="form-cadastro-defeito" onsubmit="saveDefectManual(event)">
+                  <div class="form-group">
+                    <label for="def-codigo"><i class="fa-solid fa-key"></i> Código *</label>
+                    <input type="text" id="def-codigo" placeholder="Ex: CO-01, D-02" required style="text-transform: uppercase;">
+                  </div>
+                  <div class="form-group">
+                    <label for="def-descricao">Descrição / Detalhes</label>
+                    <input type="text" id="def-descricao" placeholder="Ex: Riscos profundos no gabinete">
+                  </div>
+                  <button type="submit" class="btn btn-primary btn-block">
+                    <i class="fa-solid fa-floppy-disk"></i> Cadastrar Código
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <div class="card glass-card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <h3 id="defect-table-title"><i class="fa-solid fa-list"></i> Códigos Cadastrados</h3>
+                <input type="text" id="defect-search" placeholder="Buscar código ou descrição..." class="search-input-sm" oninput="filterDefectTable()" style="max-width: 200px; padding: 4px 8px; font-size: 0.9em; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: #fff;">
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Código</th>
+                        <th>Descrição</th>
+                        <th style="width: 100px;">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-defeitos-body">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <!-- 5. MENU RECEBIMENTO (OPERACIONAL) -->
         <section id="view-recebimento" class="page-view">
           <div class="card glass-card highlight-card">
@@ -645,12 +749,7 @@
                 <div class="form-group">
                   <label for="cos-defeitos"><i class="fa-solid fa-triangle-exclamation"></i> Defeitos Cosméticos Encontrados (Se houver)</label>
                   <select id="cos-defeitos" multiple class="select-multiple">
-                    <option value="CARCAÇA_ARRANHADA">Carcaça Arranhada / Riscada</option>
-                    <option value="CARCAÇA_QUEBRADA">Carcaça Quebrada / Trincada</option>
-                    <option value="ETIQUETA_DANIFICADA">Etiqueta do Produto Danificada/Ilegível</option>
-                    <option value="SEM_PARAFUSOS">Sem Parafusos de Fixação</option>
-                    <option value="SUJEIRA_GRAVE">Sujeira Grave / Manchas de Óleo</option>
-                    <option value="CONECTOR_DANIFICADO">Conector RJA / PON Quebrado</option>
+                    <!-- Dinamicamente populado do banco de dados -->
                   </select>
                 </div>
 
@@ -770,39 +869,53 @@
                 <div class="grid-2col margin-top">
                   <div class="form-group">
                     <label for="rep-defeito"><i class="fa-solid fa-triangle-exclamation"></i> Defeito Constatado *</label>
-                    <input type="text" id="rep-defeito" placeholder="Ex: Curto na linha de entrada" required>
+                    <select id="rep-defeito" required>
+                      <option value="">Selecione...</option>
+                    </select>
                   </div>
                   <div class="form-group">
                     <label for="rep-local"><i class="fa-solid fa-crosshairs"></i> Local Danificado *</label>
-                    <input type="text" id="rep-local" placeholder="Ex: Placa Fonte" required>
+                    <select id="rep-local" required>
+                      <option value="">Selecione...</option>
+                    </select>
                   </div>
                 </div>
 
                 <div class="grid-2col">
                   <div class="form-group">
                     <label for="rep-causa"><i class="fa-solid fa-circle-question"></i> Causa *</label>
-                    <input type="text" id="rep-causa" placeholder="Ex: Sobretensão na rede" required>
+                    <select id="rep-causa" required>
+                      <option value="">Selecione...</option>
+                    </select>
                   </div>
                   <div class="form-group">
                     <label for="rep-servico"><i class="fa-solid fa-gears"></i> Serviço Executado *</label>
-                    <input type="text" id="rep-servico" placeholder="Ex: Substituição de Varistor" required>
+                    <select id="rep-servico" required>
+                      <option value="">Selecione...</option>
+                    </select>
                   </div>
                 </div>
 
                 <div class="grid-2col">
                   <div class="form-group">
                     <label for="rep-designator"><i class="fa-solid fa-microchip"></i> Referência Designator *</label>
-                    <input type="text" id="rep-designator" placeholder="Ex: U12, C45" required style="text-transform: uppercase;">
+                    <select id="rep-designator" required>
+                      <option value="">Selecione...</option>
+                    </select>
                   </div>
                   <div class="form-group">
                     <label for="rep-tecnico"><i class="fa-solid fa-user-gear"></i> Nome do Técnico *</label>
-                    <input type="text" id="rep-tecnico" placeholder="Ex: Rodrigo Barreto" required>
+                    <select id="rep-tecnico" required>
+                      <option value="">Selecione...</option>
+                    </select>
                   </div>
                 </div>
 
                 <div class="form-group">
                   <label for="rep-reparadora"><i class="fa-solid fa-industry"></i> Reparadora *</label>
-                  <input type="text" id="rep-reparadora" placeholder="Ex: CTDI" required>
+                  <select id="rep-reparadora" required>
+                    <option value="">Selecione...</option>
+                  </select>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block">

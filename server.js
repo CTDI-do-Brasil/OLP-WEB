@@ -103,6 +103,62 @@ async function initDbConnection() {
       console.log("[Database] Seed de localidades inserido.");
     }
 
+    // Seed Defect Codes only if empty
+    const defectsCount = await pool.query('SELECT COUNT(*) FROM defect_codes');
+    if (parseInt(defectsCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO defect_codes (categoria, codigo, descricao) VALUES
+        ('cosmetico', 'CARCAÇA_ARRANHADA', 'Carcaça Arranhada / Riscada'),
+        ('cosmetico', 'CARCAÇA_QUEBRADA', 'Carcaça Quebrada / Trincada'),
+        ('cosmetico', 'ETIQUETA_DANIFICADA', 'Etiqueta do Produto Danificada/Ilegível'),
+        ('cosmetico', 'SEM_PARAFUSOS', 'Sem Parafusos de Fixação'),
+        ('cosmetico', 'SUJEIRA_GRAVE', 'Sujeira Grave / Manchas de Óleo'),
+        ('cosmetico', 'CONECTOR_DANIFICADO', 'Conector RJ45 / PON Quebrado'),
+        
+        ('defeito_funcional', 'FONTE_QUEIMADA', 'Fonte Queimada / Não Liga'),
+        ('defeito_funcional', 'WIFI_INSTAVEL', 'Sinal de Wi-Fi caindo ou fraco'),
+        ('defeito_funcional', 'SEM_SINAL_PON', 'Não sincroniza sinal óptico'),
+        ('defeito_funcional', 'PORTA_LAN_QUEIMADA', 'Portas LAN RJ45 inoperantes'),
+        
+        ('bom', 'PLACA_PRINCIPAL_HG8145V5', 'Placa Mãe Huawei HG8145V5'),
+        ('bom', 'GABINETE_PLASTICO_HG8145V5', 'Carcaça plástica HG8145V5'),
+        ('bom', 'CONECTOR_OPTICO_SHIELD', 'Protetor do Conector Óptico'),
+        
+        ('defeito_constatado', 'CURTO_LINHA_ENTRADA', 'Curto-circuito na entrada de alimentação'),
+        ('defeito_constatado', 'LED_POWER_APAGADO', 'Led Power não acende com fonte ok'),
+        ('defeito_constatado', 'PORTA_RJ45_INOPERANTE', 'Porta LAN sem sinal elétrico'),
+        ('defeito_constatado', 'CPU_SOBREAQUECENDO', 'Processador principal esquentando muito'),
+        
+        ('local_danificado', 'PLACA_FONTE', 'Circuito de alimentação primária'),
+        ('local_danificado', 'PORTA_LAN_1', 'Conector físico LAN 1'),
+        ('local_danificado', 'CIRCUITO_PON', 'Circuito transceptor óptico GPON'),
+        ('local_danificado', 'ANTENA_WIFI', 'Antena integrada Wi-Fi interna'),
+        
+        ('causa', 'SOBRETENSAO_REDE', 'Descarga elétrica / Sobretensão externa'),
+        ('causa', 'DESGASTE_NATURAL', 'Desgaste natural de componentes (MTBF)'),
+        ('causa', 'CURTO_CIRCUITO', 'Curto provocado por falha interna'),
+        ('causa', 'QUEDA_FISICA', 'Dano físico causado por queda'),
+        
+        ('servico_executado', 'SUBSTITUICAO_VARISTOR', 'Substituição do varistor de proteção'),
+        ('servico_executado', 'RESSOLDA_CI', 'Ressolda de Circuito Integrado BGA'),
+        ('servico_executado', 'LIMPEZA_QUIMICA', 'Limpeza de oxidação com álcool isopropílico'),
+        ('servico_executado', 'RECOMPOSICAO_TRILHA', 'Recomposição de trilha rompida com fio jumper'),
+        
+        ('referencia_designator', 'U12', 'Circuito Integrado U12'),
+        ('referencia_designator', 'C45', 'Capacitor C45'),
+        ('referencia_designator', 'R10', 'Resistor R10'),
+        ('referencia_designator', 'D5', 'Diodo retificador D5'),
+        
+        ('nome_tecnico', 'RODRIGO BARRETO', 'Rodrigo Barreto - Lab 1'),
+        ('nome_tecnico', 'JOÃO SILVA', 'João Silva - Reparo Placas'),
+        ('nome_tecnico', 'MARIA SANTOS', 'Maria Santos - Solda BGA'),
+        
+        ('reparadora', 'CTDI BRASIL', 'CTDI Unidade Jundiaí'),
+        ('reparadora', 'OLP REPAROS', 'OLP Laboratório Interno')
+      `);
+      console.log("[Database] Seed de códigos de defeito inserido.");
+    }
+
   } catch (err) {
     console.error("[Database] Erro ao carregar schema.sql ou semear dados:", err.message);
   }
@@ -309,6 +365,60 @@ app.put('/api/units/:id', async (req, res) => {
       ]
     );
     res.json({ success: true, message: 'Unidade atualizada!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DEFECT CODES ENDPOINTS
+app.get('/api/defect-codes', async (req, res) => {
+  const { categoria } = req.query;
+  try {
+    let result;
+    if (categoria) {
+      result = await pool.query('SELECT * FROM defect_codes WHERE categoria = $1 ORDER BY codigo ASC', [categoria]);
+    } else {
+      result = await pool.query('SELECT * FROM defect_codes ORDER BY categoria ASC, codigo ASC');
+    }
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/defect-codes', async (req, res) => {
+  const payload = req.body;
+  try {
+    if (Array.isArray(payload)) {
+      for (const item of payload) {
+        await pool.query(
+          `INSERT INTO defect_codes (categoria, codigo, descricao) 
+           VALUES ($1, $2, $3) 
+           ON CONFLICT (categoria, codigo) DO UPDATE SET descricao = EXCLUDED.descricao`,
+          [item.categoria, item.codigo, item.descricao || '']
+        );
+      }
+      res.status(201).json({ success: true, message: `${payload.length} códigos salvos com sucesso!` });
+    } else {
+      const { categoria, codigo, descricao } = payload;
+      await pool.query(
+        `INSERT INTO defect_codes (categoria, codigo, descricao) 
+         VALUES ($1, $2, $3) 
+         ON CONFLICT (categoria, codigo) DO UPDATE SET descricao = EXCLUDED.descricao`,
+        [categoria, codigo, descricao || '']
+      );
+      res.status(201).json({ success: true, message: 'Código salvo com sucesso!' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/defect-codes/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM defect_codes WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Código removido!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
