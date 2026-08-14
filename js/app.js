@@ -2332,7 +2332,6 @@ function setupRelatorioView(subType) {
   document.getElementById('relatorio-title').innerHTML = `<i class="fa-solid fa-file-excel"></i> ${titleMap[subType]}`;
   renderRelatorioTable();
 }
-
 function renderRelatorioTable() {
   const subType = appState.currentReportSubmenu;
   const dataInicio = document.getElementById('rel-data-inicio').value;
@@ -2344,11 +2343,11 @@ function renderRelatorioTable() {
     if (fab && u.fabricante !== fab) return false;
     if (mod && u.modelo !== mod) return false;
 
-    let targetDate = u.dataRecebimento.slice(0, 10);
-    if (subType === 'cosmetico' && u.cosmetico) targetDate = u.cosmetico.data.slice(0, 10);
-    if (subType === 'funcional' && u.funcional) targetDate = u.funcional.data.slice(0, 10);
-    if (subType === 'embalagem' && u.embalagem) targetDate = u.embalagem.data.slice(0, 10);
-    if (subType === 'expedicao' && u.expedicao) targetDate = u.expedicao.data.slice(0, 10);
+    let targetDate = u.dataRecebimento ? u.dataRecebimento.slice(0, 10) : '';
+    if (subType === 'cosmetico' && u.cosmetico && u.cosmetico.data) targetDate = u.cosmetico.data.slice(0, 10);
+    if (subType === 'funcional' && u.funcional && u.funcional.data) targetDate = u.funcional.data.slice(0, 10);
+    if (subType === 'embalagem' && u.embalagem && u.embalagem.data) targetDate = u.embalagem.data.slice(0, 10);
+    if (subType === 'expedicao' && u.expedicao && u.expedicao.data) targetDate = u.expedicao.data.slice(0, 10);
 
     if (dataInicio && targetDate < dataInicio) return false;
     if (dataFim && targetDate > dataFim) return false;
@@ -2382,15 +2381,15 @@ function renderRelatorioTable() {
     filteredUnits.forEach(u => {
       tbody.innerHTML += `
         <tr>
-          <td>${u.dataRecebimento}</td>
-          <td>${u.fabricante}</td>
-          <td>${u.modelo}</td>
-          <td><code>${u.serial}</code></td>
+          <td>${u.dataRecebimento || '-'}</td>
+          <td>${u.fabricante || '-'}</td>
+          <td>${u.modelo || '-'}</td>
+          <td><code>${u.serial || '-'}</code></td>
           <td><code>${u.gpon || '-'}</code></td>
           <td><code>${u.mac || '-'}</code></td>
-          <td>${u.localidade}</td>
-          <td>${u.operador}</td>
-          <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status}</span></td>
+          <td>${u.localidade || '-'}</td>
+          <td>${u.operador || '-'}</td>
+          <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status || '-'}</span></td>
         </tr>
       `;
     });
@@ -2408,16 +2407,17 @@ function renderRelatorioTable() {
       </tr>
     `;
     filteredUnits.forEach(u => {
+      if (!u.cosmetico) return;
       tbody.innerHTML += `
         <tr>
-          <td>${u.cosmetico.data}</td>
-          <td><code>${u.serial}</code></td>
-          <td>${u.fabricante}</td>
-          <td>${u.modelo}</td>
-          <td><span class="badge ${u.cosmetico.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.cosmetico.resultado}</span></td>
-          <td>${[...u.cosmetico.defeitos, u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || '-'}</td>
+          <td>${u.cosmetico.data || '-'}</td>
+          <td><code>${u.serial || '-'}</code></td>
+          <td>${u.fabricante || '-'}</td>
+          <td>${u.modelo || '-'}</td>
+          <td><span class="badge ${u.cosmetico.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.cosmetico.resultado || '-'}</span></td>
+          <td>${[...(u.cosmetico.defeitos || []), u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || '-'}</td>
           <td>${u.cosmetico.obs || '-'}</td>
-          <td>${u.cosmetico.operador}</td>
+          <td>${u.cosmetico.operador || '-'}</td>
         </tr>
       `;
     });
@@ -2435,16 +2435,17 @@ function renderRelatorioTable() {
       </tr>
     `;
     filteredUnits.forEach(u => {
+      if (!u.funcional) return;
       tbody.innerHTML += `
         <tr>
-          <td>${u.funcional.data}</td>
-          <td><code>${u.serial}</code></td>
-          <td>${u.fabricante}</td>
-          <td>${u.modelo}</td>
-          <td><span class="badge ${u.funcional.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.funcional.resultado}</span></td>
-          <td>${u.funcional.testes.join(', ')}</td>
+          <td>${u.funcional.data || '-'}</td>
+          <td><code>${u.serial || '-'}</code></td>
+          <td>${u.fabricante || '-'}</td>
+          <td>${u.modelo || '-'}</td>
+          <td><span class="badge ${u.funcional.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.funcional.resultado || '-'}</span></td>
+          <td>${(u.funcional.testes || []).join(', ')}</td>
           <td>${u.funcional.obs || '-'}</td>
-          <td>${u.funcional.operador}</td>
+          <td>${u.funcional.operador || '-'}</td>
         </tr>
       `;
     });
@@ -2460,14 +2461,15 @@ function renderRelatorioTable() {
       </tr>
     `;
     filteredUnits.forEach(u => {
+      if (!u.embalagem) return;
       tbody.innerHTML += `
         <tr>
-          <td>${u.embalagem.data}</td>
-          <td><strong>${u.embalagem.caixaId}</strong></td>
-          <td><code>${u.serial}</code></td>
-          <td>${u.fabricante}</td>
-          <td>${u.modelo}</td>
-          <td>${u.embalagem.operador}</td>
+          <td>${u.embalagem.data || '-'}</td>
+          <td><strong>${u.embalagem.caixaId || '-'}</strong></td>
+          <td><code>${u.serial || '-'}</code></td>
+          <td>${u.fabricante || '-'}</td>
+          <td>${u.modelo || '-'}</td>
+          <td>${u.embalagem.operador || '-'}</td>
         </tr>
       `;
     });
@@ -2483,14 +2485,15 @@ function renderRelatorioTable() {
       </tr>
     `;
     filteredUnits.forEach(u => {
+      if (!u.expedicao) return;
       tbody.innerHTML += `
         <tr>
-          <td>${u.expedicao.data}</td>
-          <td><strong>${u.expedicao.ordem}</strong></td>
-          <td>${u.expedicao.destino}</td>
-          <td><code>${u.serial}</code></td>
-          <td>${u.fabricante} ${u.modelo}</td>
-          <td>${u.expedicao.operador}</td>
+          <td>${u.expedicao.data || '-'}</td>
+          <td><strong>${u.expedicao.ordem || '-'}</strong></td>
+          <td>${u.expedicao.destino || '-'}</td>
+          <td><code>${u.serial || '-'}</code></td>
+          <td>${u.fabricante || '-'} ${u.modelo || '-'}</td>
+          <td>${u.expedicao.operador || '-'}</td>
         </tr>
       `;
     });
