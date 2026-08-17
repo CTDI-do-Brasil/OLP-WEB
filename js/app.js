@@ -2342,238 +2342,255 @@ function setupRelatorioView(subType) {
   renderRelatorioTable();
 }
 function renderRelatorioTable() {
-  const subType = appState.currentReportSubmenu;
-  const dataInicio = document.getElementById('rel-data-inicio').value;
-  const dataFim = document.getElementById('rel-data-fim').value;
-  const fab = document.getElementById('rel-fabricante').value;
-  const mod = document.getElementById('rel-modelo').value;
+  try {
+    const subType = appState.currentReportSubmenu;
+    const dataInicioEl = document.getElementById('rel-data-inicio');
+    const dataFimEl = document.getElementById('rel-data-fim');
+    const fabEl = document.getElementById('rel-fabricante');
+    const modEl = document.getElementById('rel-modelo');
 
-  const filteredUnits = appState.units.filter(u => {
-    if (fab && u.fabricante !== fab) return false;
-    if (mod && u.modelo !== mod) return false;
+    const dataInicio = dataInicioEl ? dataInicioEl.value : '';
+    const dataFim = dataFimEl ? dataFimEl.value : '';
+    const fab = fabEl ? fabEl.value : '';
+    const mod = modEl ? modEl.value : '';
 
-    let targetDate = u.dataRecebimento ? u.dataRecebimento.slice(0, 10) : '';
-    if (subType === 'cosmetico' && u.cosmetico && u.cosmetico.data) targetDate = u.cosmetico.data.slice(0, 10);
-    if (subType === 'funcional' && u.funcional && u.funcional.data) targetDate = u.funcional.data.slice(0, 10);
-    if (subType === 'embalagem' && u.embalagem && u.embalagem.data) targetDate = u.embalagem.data.slice(0, 10);
-    if (subType === 'expedicao' && u.expedicao && u.expedicao.data) targetDate = u.expedicao.data.slice(0, 10);
+    const unitsList = Array.isArray(appState.units) ? appState.units : [];
 
-    if (dataInicio && targetDate < dataInicio) return false;
-    if (dataFim && targetDate > dataFim) return false;
+    const filteredUnits = unitsList.filter(u => {
+      if (!u) return false;
+      if (fab && u.fabricante !== fab) return false;
+      if (mod && u.modelo !== mod) return false;
 
-    if (subType === 'cosmetico') return u.cosmetico !== null;
-    if (subType === 'funcional') return u.funcional !== null;
-    if (subType === 'embalagem') return u.embalagem !== null;
-    if (subType === 'expedicao') return u.expedicao !== null;
+      let targetDate = u.dataRecebimento ? String(u.dataRecebimento).slice(0, 10) : '';
+      if (subType === 'cosmetico' && u.cosmetico && u.cosmetico.data) targetDate = String(u.cosmetico.data).slice(0, 10);
+      if (subType === 'funcional' && u.funcional && u.funcional.data) targetDate = String(u.funcional.data).slice(0, 10);
+      if (subType === 'embalagem' && u.embalagem && u.embalagem.data) targetDate = String(u.embalagem.data).slice(0, 10);
+      if (subType === 'expedicao' && u.expedicao && u.expedicao.data) targetDate = String(u.expedicao.data).slice(0, 10);
 
-    return true;
-  });
+      if (dataInicio && targetDate < dataInicio) return false;
+      if (dataFim && targetDate > dataFim) return false;
 
-  const thead = document.getElementById('relatorio-thead');
-  const tbody = document.getElementById('relatorio-tbody');
-  tbody.innerHTML = '';
+      if (subType === 'cosmetico') return u.cosmetico != null && typeof u.cosmetico === 'object';
+      if (subType === 'funcional') return u.funcional != null && typeof u.funcional === 'object';
+      if (subType === 'embalagem') return u.embalagem != null && typeof u.embalagem === 'object';
+      if (subType === 'expedicao') return u.expedicao != null && typeof u.expedicao === 'object';
 
-  if (subType === 'recebimento') {
-    thead.innerHTML = `
-      <tr>
-        <th>Data/Hora</th>
-        <th>Fabricante</th>
-        <th>Modelo</th>
-        <th>Serial</th>
-        <th>GPON</th>
-        <th>MAC</th>
-        <th>Localidade</th>
-        <th>Operador</th>
-        <th>Status</th>
-      </tr>
-    `;
-    filteredUnits.forEach(u => {
-      tbody.innerHTML += `
+      return true;
+    });
+
+    const thead = document.getElementById('relatorio-thead');
+    const tbody = document.getElementById('relatorio-tbody');
+    if (!thead || !tbody) return;
+    tbody.innerHTML = '';
+
+    if (subType === 'recebimento') {
+      thead.innerHTML = `
         <tr>
-          <td>${u.dataRecebimento || '-'}</td>
-          <td>${u.fabricante || '-'}</td>
-          <td>${u.modelo || '-'}</td>
-          <td><code>${u.serial || '-'}</code></td>
-          <td><code>${u.gpon || '-'}</code></td>
-          <td><code>${u.mac || '-'}</code></td>
-          <td>${u.localidade || '-'}</td>
-          <td>${u.operador || '-'}</td>
-          <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status || '-'}</span></td>
+          <th>Data/Hora</th>
+          <th>Fabricante</th>
+          <th>Modelo</th>
+          <th>Serial</th>
+          <th>GPON</th>
+          <th>MAC</th>
+          <th>Localidade</th>
+          <th>Operador</th>
+          <th>Status</th>
         </tr>
       `;
-    });
-  } else if (subType === 'cosmetico') {
-    thead.innerHTML = `
-      <tr>
-        <th>Data/Hora</th>
-        <th>Serial</th>
-        <th>Fabricante</th>
-        <th>Modelo</th>
-        <th>Resultado</th>
-        <th>Defeitos</th>
-        <th>Observações</th>
-        <th>Operador</th>
-      </tr>
-    `;
-    filteredUnits.forEach(u => {
-      if (!u.cosmetico) return;
-      tbody.innerHTML += `
+      filteredUnits.forEach(u => {
+        tbody.innerHTML += `
+          <tr>
+            <td>${u.dataRecebimento || '-'}</td>
+            <td>${u.fabricante || '-'}</td>
+            <td>${u.modelo || '-'}</td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td><code>${u.gpon || '-'}</code></td>
+            <td><code>${u.mac || '-'}</code></td>
+            <td>${u.localidade || '-'}</td>
+            <td>${u.operador || '-'}</td>
+            <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status || '-'}</span></td>
+          </tr>
+        `;
+      });
+    } else if (subType === 'cosmetico') {
+      thead.innerHTML = `
         <tr>
-          <td>${u.cosmetico.data || '-'}</td>
-          <td><code>${u.serial || '-'}</code></td>
-          <td>${u.fabricante || '-'}</td>
-          <td>${u.modelo || '-'}</td>
-          <td><span class="badge ${u.cosmetico.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.cosmetico.resultado || '-'}</span></td>
-          <td>${[...(u.cosmetico.defeitos || []), u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || '-'}</td>
-          <td>${u.cosmetico.obs || '-'}</td>
-          <td>${u.cosmetico.operador || '-'}</td>
+          <th>Data/Hora</th>
+          <th>Serial</th>
+          <th>Fabricante</th>
+          <th>Modelo</th>
+          <th>Resultado</th>
+          <th>Defeitos</th>
+          <th>Observações</th>
+          <th>Operador</th>
         </tr>
       `;
-    });
-  } else if (subType === 'funcional') {
-    thead.innerHTML = `
-      <tr>
-        <th>Data/Hora</th>
-        <th>Serial</th>
-        <th>Fabricante</th>
-        <th>Modelo</th>
-        <th>Resultado</th>
-        <th>Testes Aprovados</th>
-        <th>Observações</th>
-        <th>Operador</th>
-      </tr>
-    `;
-    filteredUnits.forEach(u => {
-      if (!u.funcional) return;
-      tbody.innerHTML += `
+      filteredUnits.forEach(u => {
+        if (!u.cosmetico) return;
+        tbody.innerHTML += `
+          <tr>
+            <td>${u.cosmetico.data || '-'}</td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td>${u.fabricante || '-'}</td>
+            <td>${u.modelo || '-'}</td>
+            <td><span class="badge ${u.cosmetico.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.cosmetico.resultado || '-'}</span></td>
+            <td>${[...(u.cosmetico.defeitos || []), u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || '-'}</td>
+            <td>${u.cosmetico.obs || '-'}</td>
+            <td>${u.cosmetico.operador || '-'}</td>
+          </tr>
+        `;
+      });
+    } else if (subType === 'funcional') {
+      thead.innerHTML = `
         <tr>
-          <td>${u.funcional.data || '-'}</td>
-          <td><code>${u.serial || '-'}</code></td>
-          <td>${u.fabricante || '-'}</td>
-          <td>${u.modelo || '-'}</td>
-          <td><span class="badge ${u.funcional.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.funcional.resultado || '-'}</span></td>
-          <td>${(u.funcional.testes || []).join(', ')}</td>
-          <td>${u.funcional.obs || '-'}</td>
-          <td>${u.funcional.operador || '-'}</td>
+          <th>Data/Hora</th>
+          <th>Serial</th>
+          <th>Fabricante</th>
+          <th>Modelo</th>
+          <th>Resultado</th>
+          <th>Testes Aprovados</th>
+          <th>Observações</th>
+          <th>Operador</th>
         </tr>
       `;
-    });
-  } else if (subType === 'embalagem') {
-    thead.innerHTML = `
-      <tr>
-        <th>Data/Hora</th>
-        <th>Código da Caixa</th>
-        <th>Serial</th>
-        <th>Fabricante</th>
-        <th>Modelo</th>
-        <th>Operador</th>
-      </tr>
-    `;
-    filteredUnits.forEach(u => {
-      if (!u.embalagem) return;
-      tbody.innerHTML += `
+      filteredUnits.forEach(u => {
+        if (!u.funcional) return;
+        tbody.innerHTML += `
+          <tr>
+            <td>${u.funcional.data || '-'}</td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td>${u.fabricante || '-'}</td>
+            <td>${u.modelo || '-'}</td>
+            <td><span class="badge ${u.funcional.resultado === 'APROVADO' ? 'badge-success' : 'badge-danger'}">${u.funcional.resultado || '-'}</span></td>
+            <td>${(u.funcional.testes || []).join(', ')}</td>
+            <td>${u.funcional.obs || '-'}</td>
+            <td>${u.funcional.operador || '-'}</td>
+          </tr>
+        `;
+      });
+    } else if (subType === 'embalagem') {
+      thead.innerHTML = `
         <tr>
-          <td>${u.embalagem.data || '-'}</td>
-          <td><strong>${u.embalagem.caixaId || '-'}</strong></td>
-          <td><code>${u.serial || '-'}</code></td>
-          <td>${u.fabricante || '-'}</td>
-          <td>${u.modelo || '-'}</td>
-          <td>${u.embalagem.operador || '-'}</td>
+          <th>Data/Hora</th>
+          <th>Código da Caixa</th>
+          <th>Serial</th>
+          <th>Fabricante</th>
+          <th>Modelo</th>
+          <th>Operador</th>
         </tr>
       `;
-    });
-  } else if (subType === 'expedicao') {
-    thead.innerHTML = `
-      <tr>
-        <th>Data/Hora</th>
-        <th>Ordem Expedição</th>
-        <th>Destino</th>
-        <th>Serial</th>
-        <th>Fabricante / Modelo</th>
-        <th>Operador</th>
-      </tr>
-    `;
-    filteredUnits.forEach(u => {
-      if (!u.expedicao) return;
-      tbody.innerHTML += `
+      filteredUnits.forEach(u => {
+        if (!u.embalagem) return;
+        tbody.innerHTML += `
+          <tr>
+            <td>${u.embalagem.data || '-'}</td>
+            <td><strong>${u.embalagem.caixaId || '-'}</strong></td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td>${u.fabricante || '-'}</td>
+            <td>${u.modelo || '-'}</td>
+            <td>${u.embalagem.operador || '-'}</td>
+          </tr>
+        `;
+      });
+    } else if (subType === 'expedicao') {
+      thead.innerHTML = `
         <tr>
-          <td>${u.expedicao.data || '-'}</td>
-          <td><strong>${u.expedicao.ordem || '-'}</strong></td>
-          <td>${u.expedicao.destino || '-'}</td>
-          <td><code>${u.serial || '-'}</code></td>
-          <td>${u.fabricante || '-'} ${u.modelo || '-'}</td>
-          <td>${u.expedicao.operador || '-'}</td>
+          <th>Data/Hora</th>
+          <th>Ordem Expedição</th>
+          <th>Destino</th>
+          <th>Serial</th>
+          <th>Fabricante / Modelo</th>
+          <th>Operador</th>
         </tr>
       `;
-    });
+      filteredUnits.forEach(u => {
+        if (!u.expedicao) return;
+        tbody.innerHTML += `
+          <tr>
+            <td>${u.expedicao.data || '-'}</td>
+            <td><strong>${u.expedicao.ordem || '-'}</strong></td>
+            <td>${u.expedicao.destino || '-'}</td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td>${u.fabricante || '-'} ${u.modelo || '-'}</td>
+            <td>${u.expedicao.operador || '-'}</td>
+          </tr>
+        `;
+      });
+    }
+  } catch (err) {
+    console.error("Erro ao renderizar tabela de relatório:", err);
   }
 }
 
 function exportCurrentReportToExcel() {
-  const subType = appState.currentReportSubmenu;
-  const dataRows = [];
+  try {
+    const subType = appState.currentReportSubmenu;
+    const dataRows = [];
 
-  const tbody = document.querySelectorAll('#relatorio-tbody tr');
-  tbody.forEach(tr => {
-    const tds = tr.querySelectorAll('td');
-    if (tds.length === 0) return;
+    const tbody = document.querySelectorAll('#relatorio-tbody tr');
+    tbody.forEach(tr => {
+      const tds = tr.querySelectorAll('td');
+      if (tds.length === 0) return;
 
-    if (subType === 'recebimento') {
-      dataRows.push({
-        'Data Recebimento': tds[0].innerText,
-        'Fabricante': tds[1].innerText,
-        'Modelo': tds[2].innerText,
-        'Serial': tds[3].innerText,
-        'GPON': tds[4].innerText,
-        'MAC': tds[5].innerText,
-        'Localidade': tds[6].innerText,
-        'Operador': tds[7].innerText,
-        'Status': tds[8].innerText
-      });
-    } else if (subType === 'cosmetico') {
-      dataRows.push({
-        'Data Apontamento': tds[0].innerText,
-        'Serial': tds[1].innerText,
-        'Fabricante': tds[2].innerText,
-        'Modelo': tds[3].innerText,
-        'Resultado Cosmético': tds[4].innerText,
-        'Defeitos': tds[5].innerText,
-        'Observações': tds[6].innerText,
-        'Operador': tds[7].innerText
-      });
-    } else if (subType === 'funcional') {
-      dataRows.push({
-        'Data Apontamento': tds[0].innerText,
-        'Serial': tds[1].innerText,
-        'Fabricante': tds[2].innerText,
-        'Modelo': tds[3].innerText,
-        'Resultado Funcional': tds[4].innerText,
-        'Testes Executados': tds[5].innerText,
-        'Observações': tds[6].innerText,
-        'Operador': tds[7].innerText
-      });
-    } else if (subType === 'embalagem') {
-      dataRows.push({
-        'Data Embalagem': tds[0].innerText,
-        'Código Caixa': tds[1].innerText,
-        'Serial': tds[2].innerText,
-        'Fabricante': tds[3].innerText,
-        'Modelo': tds[4].innerText,
-        'Operador': tds[5].innerText
-      });
-    } else if (subType === 'expedicao') {
-      dataRows.push({
-        'Data Expedição': tds[0].innerText,
-        'Ordem Expedição': tds[1].innerText,
-        'Destino': tds[2].innerText,
-        'Serial': tds[3].innerText,
-        'Fabricante/Modelo': tds[4].innerText,
-        'Operador': tds[5].innerText
-      });
-    }
-  });
+      if (subType === 'recebimento') {
+        dataRows.push({
+          'Data Recebimento': tds[0] ? tds[0].innerText : '',
+          'Fabricante': tds[1] ? tds[1].innerText : '',
+          'Modelo': tds[2] ? tds[2].innerText : '',
+          'Serial': tds[3] ? tds[3].innerText : '',
+          'GPON': tds[4] ? tds[4].innerText : '',
+          'MAC': tds[5] ? tds[5].innerText : '',
+          'Localidade': tds[6] ? tds[6].innerText : '',
+          'Operador': tds[7] ? tds[7].innerText : '',
+          'Status': tds[8] ? tds[8].innerText : ''
+        });
+      } else if (subType === 'cosmetico') {
+        dataRows.push({
+          'Data Apontamento': tds[0] ? tds[0].innerText : '',
+          'Serial': tds[1] ? tds[1].innerText : '',
+          'Fabricante': tds[2] ? tds[2].innerText : '',
+          'Modelo': tds[3] ? tds[3].innerText : '',
+          'Resultado Cosmético': tds[4] ? tds[4].innerText : '',
+          'Defeitos': tds[5] ? tds[5].innerText : '',
+          'Observações': tds[6] ? tds[6].innerText : '',
+          'Operador': tds[7] ? tds[7].innerText : ''
+        });
+      } else if (subType === 'funcional') {
+        dataRows.push({
+          'Data Apontamento': tds[0] ? tds[0].innerText : '',
+          'Serial': tds[1] ? tds[1].innerText : '',
+          'Fabricante': tds[2] ? tds[2].innerText : '',
+          'Modelo': tds[3] ? tds[3].innerText : '',
+          'Resultado Funcional': tds[4] ? tds[4].innerText : '',
+          'Testes Executados': tds[5] ? tds[5].innerText : '',
+          'Observações': tds[6] ? tds[6].innerText : '',
+          'Operador': tds[7] ? tds[7].innerText : ''
+        });
+      } else if (subType === 'embalagem') {
+        dataRows.push({
+          'Data Embalagem': tds[0] ? tds[0].innerText : '',
+          'Código Caixa': tds[1] ? tds[1].innerText : '',
+          'Serial': tds[2] ? tds[2].innerText : '',
+          'Fabricante': tds[3] ? tds[3].innerText : '',
+          'Modelo': tds[4] ? tds[4].innerText : '',
+          'Operador': tds[5] ? tds[5].innerText : ''
+        });
+      } else if (subType === 'expedicao') {
+        dataRows.push({
+          'Data Expedição': tds[0] ? tds[0].innerText : '',
+          'Ordem Expedição': tds[1] ? tds[1].innerText : '',
+          'Destino': tds[2] ? tds[2].innerText : '',
+          'Serial': tds[3] ? tds[3].innerText : '',
+          'Fabricante/Modelo': tds[4] ? tds[4].innerText : '',
+          'Operador': tds[5] ? tds[5].innerText : ''
+        });
+      }
+    });
 
-  generateExcelFile(dataRows, `Relatorio_${subType.toUpperCase()}`, `Relatório ${subType}`);
+    generateExcelFile(dataRows, `Relatorio_${subType.toUpperCase()}`, `Relatório ${subType}`);
+  } catch (err) {
+    console.error("Erro ao exportar relatório para excel:", err);
+  }
 }
 
 /* ==========================================================================
