@@ -321,22 +321,18 @@ function navigate(viewId) {
     appState.currentReportSubmenu = subType;
     document.getElementById('view-relatorios').classList.add('active');
     setupRelatorioView(subType);
-    return;
-  }
-
-  // Handle Cadastro Defeito Submenu Routing
-  if (viewId.startsWith('cadastro-defeito-')) {
+  } else if (viewId.startsWith('cadastro-defeito-')) {
+    // Handle Cadastro Defeito Submenu Routing
     const subType = viewId.replace('cadastro-defeito-', '');
     appState.currentDefectCategory = subType;
     document.getElementById('view-cadastro-defeito').classList.add('active');
     setupCadastroDefeitoView(subType);
-    return;
-  }
-
-  // Activate selected view
-  const targetView = document.getElementById(`view-${viewId}`);
-  if (targetView) {
-    targetView.classList.add('active');
+  } else {
+    // Activate selected view
+    const targetView = document.getElementById(`view-${viewId}`);
+    if (targetView) {
+      targetView.classList.add('active');
+    }
   }
 
   // Highlight Nav Item
@@ -376,7 +372,20 @@ function updatePageTitle(viewId) {
   };
 
   let info = titles[viewId];
-  if (!info && viewId.startsWith('cadastro-defeito-')) {
+  if (!info && viewId.startsWith('relatorio-')) {
+    const rType = viewId.replace('relatorio-', '');
+    const rNames = {
+      'recebimento': 'Relatório de Recebimento',
+      'cosmetico': 'Relatório Cosmético',
+      'funcional': 'Relatório Funcional',
+      'embalagem': 'Relatório de Embalagem',
+      'expedicao': 'Relatório de Expedição'
+    };
+    info = {
+      title: rNames[rType] || 'Relatório Geral',
+      sub: 'Visualização, filtros e download da planilha de dados'
+    };
+  } else if (!info && viewId.startsWith('cadastro-defeito-')) {
     const catClean = viewId.replace('cadastro-defeito-', '');
     const catName = catClean.replace('_', ' ').toUpperCase();
     info = {
