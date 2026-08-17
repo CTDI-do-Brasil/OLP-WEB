@@ -14,6 +14,13 @@ function generateExcelFile(data, fileName, sheetName = "Relatório") {
     return;
   }
 
+  // Check if SheetJS library is available
+  if (typeof XLSX === 'undefined' || !XLSX.utils || !XLSX.writeFile) {
+    console.warn("SheetJS offline/indisponível. Utilizando gerador CSV nativo.");
+    downloadCsvFallback(data, fileName);
+    return;
+  }
+
   try {
     // Create a new workbook and worksheet
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -36,7 +43,36 @@ function generateExcelFile(data, fileName, sheetName = "Relatório") {
     const fullFileName = `${fileName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(workbook, fullFileName);
   } catch (err) {
-    console.error("Erro ao gerar planilha Excel:", err);
-    alert("Erro ao exportar arquivo Excel. Verifique se o SheetJS está carregado corretamente.");
+    console.warn("Falha no SheetJS, alternando para CSV fallback:", err);
+    downloadCsvFallback(data, fileName);
+  }
+}
+
+function downloadCsvFallback(data, fileName) {
+  try {
+    const keys = Object.keys(data[0]);
+    const csvRows = [];
+    csvRows.push(keys.map(k => `"${String(k).replace(/"/g, '""')}"`).join(';'));
+
+    data.forEach(row => {
+      const values = keys.map(k => {
+        const val = row[k] != null ? String(row[k]) : '';
+        return `"${val.replace(/"/g, '""')}"`;
+      });
+      csvRows.push(values.join(';'));
+    });
+
+    const csvContent = "\uFEFF" + csvRows.join("\r\n"); // UTF-8 BOM for Microsoft Excel compatibility
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${fileName}_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (e) {
+    console.error("Erro no fallback CSV:", e);
+    alert("Erro ao gerar arquivo de exportação.");
   }
 }
