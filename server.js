@@ -81,6 +81,13 @@ async function initDbConnection() {
       ON CONFLICT (name) DO NOTHING
     `);
 
+    // Insert default 'caixa' sequence if it doesn't exist (for regular packaging)
+    await pool.query(`
+      INSERT INTO sequence_generators (name, current_value)
+      VALUES ('caixa', 0)
+      ON CONFLICT (name) DO NOTHING
+    `);
+
     console.log("[Database] Tabelas inicializadas com sucesso a partir de schema.sql e sequências configuradas");
 
     // Seed Users only if empty
@@ -489,6 +496,51 @@ app.post('/api/sequence/caixa_pallet/next', async (req, res) => {
     }
     await client.query('COMMIT');
     const formatted = 'C' + String(nextVal).padStart(8, '0');
+    res.json({ formatted, sequence: nextVal });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// SEQUENCE GENERATION ENDPOINTS FOR REGULAR CAIXA
+app.get('/api/sequence/caixa/current', async (req, res) => {
+  try {
+    const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'caixa'");
+    const currentVal = result.rows[0] ? result.rows[0].current_value : 0;
+    const nextSeq = currentVal + 1;
+    const year = new Date().getFullYear();
+    const formatted = `CX-${year}-${String(nextSeq).padStart(3, '0')}`;
+    res.json({ formatted, sequence: nextSeq });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sequence/caixa/next', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      "SELECT current_value FROM sequence_generators WHERE name = 'caixa' FOR UPDATE"
+    );
+    let nextVal = 1;
+    if (result.rows[0]) {
+      nextVal = result.rows[0].current_value + 1;
+      await client.query(
+        "UPDATE sequence_generators SET current_value = $1 WHERE name = 'caixa'",
+        [nextVal]
+      );
+    } else {
+      await client.query(
+        "INSERT INTO sequence_generators (name, current_value) VALUES ('caixa', 1)"
+      );
+    }
+    await client.query('COMMIT');
+    const year = new Date().getFullYear();
+    const formatted = `CX-${year}-${String(nextVal).padStart(3, '0')}`;
     res.json({ formatted, sequence: nextVal });
   } catch (err) {
     await client.query('ROLLBACK');

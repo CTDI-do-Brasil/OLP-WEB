@@ -950,8 +950,11 @@
               <div class="grid-2col">
                 <form id="form-embalagem" onsubmit="processEmbalarUnidade(event)">
                   <div class="form-group">
-                    <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa *</label>
-                    <input type="text" id="emb-caixa-id" placeholder="Ex: CX-2026-001" required style="text-transform: uppercase;">
+                    <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
+                    <div class="flex-row">
+                      <input type="text" id="emb-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
+                      <button type="button" class="btn btn-secondary" onclick="generateNewCaixaCode()">Nova Caixa</button>
+                    </div>
                   </div>
 
                   <div class="form-group">

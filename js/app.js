@@ -351,6 +351,7 @@ function navigate(viewId) {
   if (viewId === 'cadastro-localidade') renderLocalidadesTable();
   if (viewId === 'recebimento') resetRecebimentoForm();
   if (viewId === 'consulta') filterConsulta();
+  if (viewId === 'embalagem') initEmbalagemView();
   if (viewId === 'embalagem-pallet') initPalletView();
 }
 
@@ -1882,6 +1883,78 @@ async function saveApontamentoReparo(e) {
    MENU EMBALAGEM
    ========================================================================== */
 
+async function fetchCurrentCaixaCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/caixa/current');
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    return 'CX-2026-001';
+  }
+}
+
+async function generateNextCaixaCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/caixa/next', { method: 'POST' });
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao gerar novo código de caixa no servidor!");
+    return null;
+  }
+}
+
+async function initEmbalagemView() {
+  const codeField = document.getElementById('emb-caixa-id');
+  if (codeField) {
+    codeField.placeholder = "Carregando...";
+    const code = await fetchCurrentCaixaCodeFromServer();
+    codeField.value = code;
+    updateEmbalagemBoxSummary();
+  }
+}
+
+async function generateNewCaixaCode() {
+  const codeField = document.getElementById('emb-caixa-id');
+  if (codeField) {
+    codeField.placeholder = "Carregando...";
+    const code = await generateNextCaixaCodeFromServer();
+    if (code) {
+      codeField.value = code;
+      updateEmbalagemBoxSummary();
+      showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
+    }
+  }
+}
+
+function updateEmbalagemBoxSummary() {
+  const codeField = document.getElementById('emb-caixa-id');
+  if (!codeField) return;
+  const caixaId = codeField.value.trim().toUpperCase();
+  document.getElementById('current-box-code').innerText = caixaId || 'CX-2026-001';
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  document.getElementById('current-box-count').innerText = boxUnits.length;
+
+  const unitsContainer = document.getElementById('current-box-units');
+  unitsContainer.innerHTML = '';
+  if (boxUnits.length > 0) {
+    boxUnits.forEach(u => {
+      unitsContainer.innerHTML += `
+        <div class="box-unit-chip">
+          <span>${u.serial}</span>
+          <span class="badge badge-success">${u.modelo}</span>
+        </div>
+      `;
+    });
+  } else {
+    unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>';
+  }
+}
+
 async function processEmbalarUnidade(e) {
   e.preventDefault();
   const caixaId = document.getElementById('emb-caixa-id').value.trim().toUpperCase();
@@ -1925,20 +1998,7 @@ async function processEmbalarUnidade(e) {
     document.getElementById('emb-serial').value = '';
 
     // Update Box summary
-    document.getElementById('current-box-code').innerText = caixaId;
-    const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-    document.getElementById('current-box-count').innerText = boxUnits.length;
-
-    const unitsContainer = document.getElementById('current-box-units');
-    unitsContainer.innerHTML = '';
-    boxUnits.forEach(u => {
-      unitsContainer.innerHTML += `
-        <div class="box-unit-chip">
-          <span>${u.serial}</span>
-          <span class="badge badge-success">${u.modelo}</span>
-        </div>
-      `;
-    });
+    updateEmbalagemBoxSummary();
   } catch (err) {
     console.error(err);
     alert("Erro ao salvar embalagem no servidor!");
