@@ -65,6 +65,7 @@ async function initDbConnection() {
     await pool.query(schemaSql);
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS sucata JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS reparo_eletronico JSONB');
+    await pool.query('ALTER TABLE printers ADD COLUMN IF NOT EXISTS dpi INTEGER DEFAULT 300');
     
     // Create sequence generators table for atomic sequences (concurrent safety)
     await pool.query(`
@@ -504,19 +505,20 @@ app.get('/api/printers', async (req, res) => {
 });
 
 app.post('/api/printers', async (req, res) => {
-  const { id, nome, ip, porta, modelo, posto, status } = req.body;
+  const { id, nome, ip, porta, modelo, posto, dpi, status } = req.body;
   try {
     await pool.query(
-      `INSERT INTO printers (id, nome, ip, porta, modelo, posto, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO printers (id, nome, ip, porta, modelo, posto, dpi, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (id) DO UPDATE SET 
          nome = EXCLUDED.nome,
          ip = EXCLUDED.ip,
          porta = EXCLUDED.porta,
          modelo = EXCLUDED.modelo,
          posto = EXCLUDED.posto,
+         dpi = EXCLUDED.dpi,
          status = EXCLUDED.status`,
-      [id || `PRT_${Date.now()}`, nome, ip, porta || 9100, modelo || '', posto, status || 'ATIVA']
+      [id || `PRT_${Date.now()}`, nome, ip, porta || 9100, modelo || '', posto, parseInt(dpi) || 300, status || 'ATIVA']
     );
     res.status(201).json({ success: true, message: 'Impressora cadastrada com sucesso!' });
   } catch (err) {
@@ -526,7 +528,7 @@ app.post('/api/printers', async (req, res) => {
 
 app.put('/api/printers/:id', async (req, res) => {
   const { id } = req.params;
-  const { nome, ip, porta, modelo, posto, status } = req.body;
+  const { nome, ip, porta, modelo, posto, dpi, status } = req.body;
   try {
     await pool.query(
       `UPDATE printers SET 
@@ -535,9 +537,10 @@ app.put('/api/printers/:id', async (req, res) => {
         porta = COALESCE($3, porta),
         modelo = COALESCE($4, modelo),
         posto = COALESCE($5, posto),
-        status = COALESCE($6, status)
-       WHERE id = $7`,
-      [nome, ip, porta, modelo, posto, status, id]
+        dpi = COALESCE($6, dpi),
+        status = COALESCE($7, status)
+       WHERE id = $8`,
+      [nome, ip, porta, modelo, posto, dpi ? parseInt(dpi) : null, status, id]
     );
     res.json({ success: true, message: 'Impressora atualizada!' });
   } catch (err) {

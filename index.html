@@ -604,10 +604,18 @@
                     </div>
                   </div>
 
-                  <div class="grid-2col">
+                  <div class="grid-3col">
                     <div class="form-group">
-                      <label for="prt-modelo"><i class="fa-solid fa-barcode"></i> Modelo / Observação</label>
+                      <label for="prt-modelo"><i class="fa-solid fa-barcode"></i> Modelo</label>
                       <input type="text" id="prt-modelo" placeholder="Ex: ZD220, ZT410">
+                    </div>
+
+                    <div class="form-group">
+                      <label for="prt-dpi"><i class="fa-solid fa-expand"></i> Resolução (DPI) *</label>
+                      <select id="prt-dpi">
+                        <option value="300" selected>300 DPI (Padrão)</option>
+                        <option value="203">203 DPI / 200 DPI</option>
+                      </select>
                     </div>
 
                     <div class="form-group">
@@ -643,6 +651,7 @@
                         <th>Nome</th>
                         <th>Posto</th>
                         <th>IP / Porta</th>
+                        <th>DPI</th>
                         <th>Status</th>
                         <th>Ações</th>
                       </tr>

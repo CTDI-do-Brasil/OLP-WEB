@@ -1047,6 +1047,7 @@ async function savePrinter(e) {
   const ip = document.getElementById('prt-ip').value.trim();
   const porta = parseInt(document.getElementById('prt-porta').value.trim()) || 9100;
   const modelo = document.getElementById('prt-modelo').value.trim();
+  const dpi = parseInt(document.getElementById('prt-dpi').value) || 300;
   const status = document.getElementById('prt-status').value;
 
   const printerObj = {
@@ -1056,6 +1057,7 @@ async function savePrinter(e) {
     ip,
     porta,
     modelo,
+    dpi,
     status
   };
 
@@ -1093,7 +1095,7 @@ function renderPrintersTable() {
   tbody.innerHTML = '';
 
   if (appState.printers.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma impressora cadastrada ainda.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhuma impressora cadastrada ainda.</td></tr>';
     return;
   }
 
@@ -1106,6 +1108,7 @@ function renderPrintersTable() {
       </td>
       <td><span class="badge badge-info">${p.posto}</span></td>
       <td><code>${p.ip}:${p.porta || 9100}</code></td>
+      <td><span class="badge ${p.dpi === 203 ? 'badge-warning' : 'badge-primary'}">${p.dpi || 300} DPI</span></td>
       <td>
         <span class="badge ${p.status === 'ATIVA' ? 'badge-success' : 'badge-danger'}">
           ${p.status || 'ATIVA'}
@@ -1136,6 +1139,7 @@ function editPrinter(id) {
   document.getElementById('prt-ip').value = p.ip;
   document.getElementById('prt-porta').value = p.porta || 9100;
   document.getElementById('prt-modelo').value = p.modelo || '';
+  document.getElementById('prt-dpi').value = p.dpi || 300;
   document.getElementById('prt-status').value = p.status || 'ATIVA';
 
   document.getElementById('btn-save-printer').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Atualizar Impressora';
@@ -1146,6 +1150,7 @@ function resetPrinterForm() {
   if (form) form.reset();
   document.getElementById('prt-id').value = '';
   document.getElementById('prt-porta').value = '9100';
+  document.getElementById('prt-dpi').value = '300';
   document.getElementById('btn-save-printer').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Impressora';
 }
 
@@ -1182,7 +1187,7 @@ function populatePrinterDropdowns() {
     appState.printers.filter(p => p.status === 'ATIVA').forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.innerText = `${p.nome} - [${p.posto}] (${p.ip}:${p.porta || 9100})`;
+      opt.innerText = `${p.nome} - [${p.posto}] (${p.ip}:${p.porta || 9100}) - ${p.dpi || 300} DPI`;
       if (p.id === saved) opt.selected = true;
       el.appendChild(opt);
     });
@@ -2188,7 +2193,7 @@ function updateEmbalagemBoxSummary() {
   }
 }
 
-function generateZplBoxLabel(caixaId, modelo, units) {
+function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
   const now = new Date();
   const day = String(now.getDate()).padStart(2, '0');
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -2209,12 +2214,57 @@ function generateZplBoxLabel(caixaId, modelo, units) {
     macList = units.map(u => (u.serial || '').trim().toUpperCase());
   }
   const qrMacData = macList.join('\\0D\\0A') + (macList.length > 0 ? '\\0D\\0A' : '');
-
-  // Code128 Barcode Subset C encoding for C000000001
-  // If caixaId matches C000000001, we can output >:C0>500000001 or standard Code 128
   const barcodeData = caixaId;
 
-  const zpl = `CT~~CD,~CC^~CT~
+  // Se a impressora for de 203 DPI (~8 dots/mm) vs 300 DPI (~12 dots/mm), usamos coordenadas dimensionadas (fator 203/300 = 0.677)
+  if (parseInt(targetDpi) === 203 || parseInt(targetDpi) === 200) {
+    return `CT~~CD,~CC^~CT~
+^XA
+~TA000
+~JSN
+^LT0
+^MNN
+^MTT
+^PON
+^PMN
+^LH0,0
+^JMA
+^PR4,4
+~SD15
+^JUS
+^LRN
+^CI27
+^PA0,1,1,0
+^XZ
+^XA
+^MMT
+^PW800
+^LL406
+^LS0
+^FO0,103^GB800,0,4^FS
+^FT36,175^A0B,15,14^FH\\^CI28^FD${dateStr}^FS^CI27
+^FT118,171^A0B,15,14^FH\\^CI28^FD${timeStr}^FS^CI27
+^FO1,178^GB800,0,4^FS
+^FO133,105^GB0,74,4^FS
+^FO136,142^GB664,0,4^FS
+^FT140,133^A0N,17,17^FH\\^CI28^FDBOX ID:^FS^CI27
+^BY2,3,14^FT205,132^BCN,,N,N
+^FH\\^FD${barcodeData}^FS
+^FT384,131^A0N,15,14^FH\\^CI28^FD${caixaId}^FS^CI27
+^FT140,169^A0N,17,17^FH\\^CI28^FD${modeloStr}^FS^CI27
+^FO304,146^GB0,36,4^FS
+^FT333,169^A0N,17,17^FH\\^CI28^FDBrasil TecPar^FS^CI27
+^FO0,215^GB800,0,4^FS
+^FT22,204^A0N,17,17^FH\\^CI28^FD${qtdStr}^FS^CI27
+^FT183,204^A0N,17,17^FH\\^CI28^FDEAN:^FS^CI27
+^FT324,390^BQN,2,4
+^FH\\^FDLA,${qrMacData}^FS
+^PQ1,0,1,Y
+^XZ`;
+  }
+
+  // Padrão 300 DPI
+  return `CT~~CD,~CC^~CT~
 ^XA
 ~TA000
 ~JSN
@@ -2259,21 +2309,31 @@ function generateZplBoxLabel(caixaId, modelo, units) {
 ^FH\\^FDLA,${qrMacData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
-
-  return zpl;
 }
 
 let lastGeneratedZpl = '';
 let lastGeneratedBoxId = '';
+let lastGeneratedBoxUnits = [];
+let lastGeneratedBoxModelo = '';
 
 function showZplModal(caixaId, modelo, units) {
   lastGeneratedBoxId = caixaId;
-  lastGeneratedZpl = generateZplBoxLabel(caixaId, modelo, units);
+  lastGeneratedBoxModelo = modelo;
+  lastGeneratedBoxUnits = units;
+
+  // Obter DPI da impressora selecionada (se houver)
+  const selectedPrinterId = localStorage.getItem('wms_selected_printer_emb') || 
+                            localStorage.getItem('wms_selected_printer_pallet') || 
+                            (appState.printers.length > 0 ? appState.printers[0].id : null);
+  const printer = appState.printers.find(p => p.id === selectedPrinterId);
+  const targetDpi = printer ? (printer.dpi || 300) : 300;
+
+  lastGeneratedZpl = generateZplBoxLabel(caixaId, modelo, units, targetDpi);
 
   document.getElementById('zpl-modal-box-id').innerText = caixaId;
   document.getElementById('zpl-modal-code').value = lastGeneratedZpl;
   document.getElementById('zpl-modal-info').innerHTML = `
-    <b>Modelo:</b> ${modelo} | <b>Total de Unidades:</b> ${units.length} | <b>Data/Hora:</b> ${new Date().toLocaleString('pt-BR')}
+    <b>Modelo:</b> ${modelo} | <b>Total de Unidades:</b> ${units.length} | <b>Resolução:</b> ${targetDpi} DPI | <b>Data/Hora:</b> ${new Date().toLocaleString('pt-BR')}
   `;
 
   document.getElementById('zpl-modal').classList.remove('hidden');
@@ -2308,11 +2368,6 @@ function baixarArquivoZpl() {
 }
 
 async function imprimirZplDiretoImpressora() {
-  if (!lastGeneratedZpl) {
-    alert("Nenhum código ZPL disponível para impressão.");
-    return;
-  }
-
   // Get active printer from dropdown preference or list
   const selectedPrinterId = localStorage.getItem('wms_selected_printer_emb') || 
                             localStorage.getItem('wms_selected_printer_pallet') || 
@@ -2325,8 +2380,16 @@ async function imprimirZplDiretoImpressora() {
     return;
   }
 
+  // Gera o ZPL exato para a resolução configurada desta impressora
+  const zplParaEnviar = generateZplBoxLabel(
+    lastGeneratedBoxId, 
+    lastGeneratedBoxModelo, 
+    lastGeneratedBoxUnits, 
+    printer.dpi || 300
+  );
+
   try {
-    showToast(`Enviando etiqueta para impressora ${printer.nome} (${printer.ip})...`);
+    showToast(`Enviando etiqueta para impressora ${printer.nome} [${printer.dpi || 300} DPI] (${printer.ip})...`);
 
     // Envia para o serviço local Python (Micro-serviço Zebra Socket)
     const response = await fetch('http://localhost:5000/print', {
@@ -2335,7 +2398,8 @@ async function imprimirZplDiretoImpressora() {
       body: JSON.stringify({
         ip: printer.ip,
         port: printer.porta || 9100,
-        zpl: lastGeneratedZpl,
+        dpi: printer.dpi || 300,
+        zpl: zplParaEnviar,
         boxId: lastGeneratedBoxId,
         printerName: printer.nome,
         posto: printer.posto
@@ -2352,7 +2416,7 @@ async function imprimirZplDiretoImpressora() {
     }
   } catch (err) {
     console.warn("Serviço Python local não detectado ou erro de socket:", err);
-    alert(`Atenção: Não foi possível conectar ao Agente Python local (http://localhost:5000).\n\nCertifique-se de executar o script Python "print_agent.py" na máquina do operador para envio direto via rede/IP.\n\nVocê também pode copiar o ZPL ou baixar o arquivo .zpl.`);
+    alert(`Atenção: Não foi possível conectar ao Agente Python local (http://localhost:5000).\n\nCertifique-se de executar o script/executável "ZebraPrintAgent.exe" na máquina do operador para envio direto via rede/IP.\n\nVocê também pode copiar o ZPL ou baixar o arquivo .zpl.`);
   }
 }
 
