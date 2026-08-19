@@ -351,6 +351,38 @@ app.get('/api/units', async (req, res) => {
 app.post('/api/units', async (req, res) => {
   const { id, fabricante, modelo, serial, gpon, mac, localidade, operador, dataRecebimento, status } = req.body;
   try {
+    const cleanSerial = (serial || '').trim();
+    const cleanGpon = (gpon || '').trim();
+    const cleanMac = (mac || '').trim();
+
+    const params = [];
+    let queryConditions = [];
+
+    if (cleanSerial) {
+      params.push(cleanSerial);
+      queryConditions.push(`UPPER(TRIM(serial)) = UPPER($${params.length}) OR UPPER(TRIM(COALESCE(gpon, ''))) = UPPER($${params.length}) OR UPPER(TRIM(COALESCE(mac, ''))) = UPPER($${params.length})`);
+    }
+    if (cleanGpon) {
+      params.push(cleanGpon);
+      queryConditions.push(`UPPER(TRIM(serial)) = UPPER($${params.length}) OR UPPER(TRIM(COALESCE(gpon, ''))) = UPPER($${params.length}) OR UPPER(TRIM(COALESCE(mac, ''))) = UPPER($${params.length})`);
+    }
+    if (cleanMac) {
+      params.push(cleanMac);
+      queryConditions.push(`UPPER(TRIM(serial)) = UPPER($${params.length}) OR UPPER(TRIM(COALESCE(gpon, ''))) = UPPER($${params.length}) OR UPPER(TRIM(COALESCE(mac, ''))) = UPPER($${params.length})`);
+    }
+
+    if (queryConditions.length > 0) {
+      const checkSql = `SELECT id, serial, gpon, mac, data_recebimento, operador, status FROM units WHERE (${queryConditions.join(' OR ')}) LIMIT 1`;
+      const existing = await pool.query(checkSql, params);
+      if (existing.rowCount > 0) {
+        const row = existing.rows[0];
+        return res.status(409).json({
+          error: `Unidade já cadastrada anteriormente no sistema! (Serial: ${row.serial})`,
+          existing: row
+        });
+      }
+    }
+
     await pool.query(
       `INSERT INTO units (id, fabricante, modelo, serial, gpon, mac, localidade, operador, data_recebimento, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,

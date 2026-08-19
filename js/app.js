@@ -1232,9 +1232,17 @@ function renderRecebimentoDynamicInputs(modelObj) {
   }, 100);
 }
 
+let autoRecebimentoTimeout = null;
+let isRecebimentoSubmitting = false;
+
 function handleRecebimentoInputKeyDown(event, inputEl) {
   if (event.key === 'Enter') {
     event.preventDefault(); // Impede o envio padrão do formulário do HTML
+
+    if (autoRecebimentoTimeout) {
+      clearTimeout(autoRecebimentoTimeout);
+      autoRecebimentoTimeout = null;
+    }
 
     const ruleIdx = parseInt(inputEl.dataset.ruleIndex);
     const modelId = document.getElementById('rec-modelo').value;
@@ -1291,7 +1299,7 @@ function validateRecebimentoSingleInput(inputEl) {
     feedback.className = 'rule-feedback valid';
     feedback.innerHTML = '<i class="fa-solid fa-circle-check"></i> Regra atendida';
 
-    // Se todos os campos estiverem preenchidos e válidos, envia o recebimento automaticamente
+    // Se todos os campos estiverem preenchidos e válidos, agenda o recebimento automático
     const inputs = document.querySelectorAll('#dynamic-bip-inputs input');
     let allFilled = true;
     let allValid = true;
@@ -1311,8 +1319,11 @@ function validateRecebimentoSingleInput(inputEl) {
     });
 
     if (allFilled && allValid) {
+      if (autoRecebimentoTimeout) {
+        clearTimeout(autoRecebimentoTimeout);
+      }
       // Pequeno atraso de 150ms para feedback visual (ver o campo acender verde antes de enviar)
-      setTimeout(() => {
+      autoRecebimentoTimeout = setTimeout(() => {
         const freshInputs = document.querySelectorAll('#dynamic-bip-inputs input');
         let stillGood = true;
         freshInputs.forEach((freshInp, freshIdx) => {
@@ -1322,7 +1333,7 @@ function validateRecebimentoSingleInput(inputEl) {
             stillGood = false;
           }
         });
-        if (stillGood) {
+        if (stillGood && !isRecebimentoSubmitting) {
           processRecebimentoSubmit();
         }
       }, 150);
@@ -1338,126 +1349,156 @@ function validateRecebimentoSingleInput(inputEl) {
 async function processRecebimentoSubmit(e) {
   if (e && e.preventDefault) e.preventDefault();
 
-  const modelId = document.getElementById('rec-modelo').value;
-  const localidade = document.getElementById('rec-localidade').value;
-  const selectedModel = appState.models.find(m => m.id === modelId);
+  if (autoRecebimentoTimeout) {
+    clearTimeout(autoRecebimentoTimeout);
+    autoRecebimentoTimeout = null;
+  }
 
-  if (!localidade) {
-    alert("Selecione a localidade de armazenagem!");
+  if (isRecebimentoSubmitting) {
+    console.warn("Recebimento já em processamento, bloqueando chamada duplicada.");
     return;
   }
 
-  // Coleta os valores bipados de forma robusta
-  const scannedInputs = document.querySelectorAll('#dynamic-bip-inputs input');
-  const scannedArray = [];
-  let hasRuleError = false;
-
-  let serialVal = '';
-  let gponVal = '';
-  let macVal = '';
-
-  scannedInputs.forEach((inputEl, index) => {
-    const fieldName = inputEl.dataset.fieldName.toUpperCase();
-    const val = inputEl.value.trim().toUpperCase();
-    scannedArray.push(val);
-
-    const ruleObj = selectedModel.rules[index];
-    const ruleRes = validateFieldRule(val, ruleObj);
-    if (!ruleRes.isValid) {
-      hasRuleError = true;
-    }
-
-    if (fieldName.includes('SERIAL') || fieldName.includes('SERIE') || fieldName.includes('SÉRIE')) {
-      serialVal = val;
-    } else if (fieldName.includes('GPON') || fieldName.includes('PON')) {
-      gponVal = val;
-    } else if (fieldName.includes('MAC')) {
-      macVal = val;
-    }
-  });
-
-  // Fallbacks de posição se não encontrar explicitamente pelo nome
-  if (!serialVal && scannedArray.length > 0) serialVal = scannedArray[0];
-  if (!macVal && scannedArray.length > 1) {
-    if (scannedArray.length === 2) macVal = scannedArray[1];
-    else if (scannedArray.length === 3) {
-      gponVal = scannedArray[1];
-      macVal = scannedArray[2];
-    }
-  }
-
-  // 1. Rule validation check
-  if (hasRuleError) {
-    playErrorBeep();
-    showAlertModal(
-      "VIOLAÇÃO DE REGRA DE BIPAGEM",
-      "Um ou mais campos não cumprem o formato/tamanho ou prefixo exigidos!",
-      "Verifique a mensagem de erro vermelha sob o campo."
-    );
-    return;
-  }
-
-  // 2. Inter-field duplicate check (e.g. SERIAL == MAC)
-  const interDup = checkInterFieldDuplicates(scannedArray);
-  if (interDup.hasDuplicate) {
-    playErrorBeep();
-    showAlertModal(
-      "BLOQUEIO DE VALORES DUPLICADOS",
-      `Não é permitido informar o mesmo valor em campos diferentes!`,
-      `Valor duplicado entre campos: <b>${interDup.duplicateVal}</b>`
-    );
-    return;
-  }
-
-  const dbItemToCheck = {
-    serial: serialVal,
-    gpon: gponVal,
-    mac: macVal
-  };
-
-  const dbDup = checkDatabaseDuplicates(dbItemToCheck, appState.units);
-  if (dbDup.isDuplicate) {
-    playErrorBeep();
-    showAlertModal(
-      "BLOQUEIO: UNIDADE JÁ RECEBIDA!",
-      `A unidade com ${dbDup.conflictField} "${dbDup.conflictVal}" JÁ FOI RECEBIDA no sistema!`,
-      `<b>Data do Recebimento Anterior:</b> ${dbDup.conflictRecord.dataRecebimento}<br>
-       <b>Recebido por:</b> ${dbDup.conflictRecord.operador}<br>
-       <b>Status Atual:</b> ${dbDup.conflictRecord.status}`
-    );
-    return;
-  }
-
-  // SUCCESSFUL SCAN & RECEIVING!
-  playSuccessBeep();
-
-  const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
-
-  const newUnit = {
-    id: `UNI_${Date.now()}`,
-    fabricante: selectedModel.fabricante,
-    modelo: selectedModel.nome,
-    serial: dbItemToCheck.serial,
-    gpon: dbItemToCheck.gpon,
-    mac: dbItemToCheck.mac,
-    localidade: localidade,
-    operador: appState.currentUser.login,
-    dataRecebimento: dateStr,
-    status: 'RECEBIDO',
-    cosmetico: null,
-    funcional: null,
-    embalagem: null,
-    expedicao: null
-  };
+  isRecebimentoSubmitting = true;
 
   try {
+    const modelId = document.getElementById('rec-modelo').value;
+    const localidade = document.getElementById('rec-localidade').value;
+    const selectedModel = appState.models.find(m => m.id === modelId);
+
+    if (!selectedModel) {
+      alert("Selecione um modelo válido!");
+      return;
+    }
+
+    if (!localidade) {
+      alert("Selecione a localidade de armazenagem!");
+      return;
+    }
+
+    // Coleta os valores bipados de forma robusta
+    const scannedInputs = document.querySelectorAll('#dynamic-bip-inputs input');
+    const scannedArray = [];
+    let hasRuleError = false;
+
+    let serialVal = '';
+    let gponVal = '';
+    let macVal = '';
+
+    scannedInputs.forEach((inputEl, index) => {
+      const fieldName = inputEl.dataset.fieldName.toUpperCase();
+      const val = inputEl.value.trim().toUpperCase();
+      scannedArray.push(val);
+
+      const ruleObj = selectedModel.rules[index];
+      const ruleRes = validateFieldRule(val, ruleObj);
+      if (!ruleRes.isValid) {
+        hasRuleError = true;
+      }
+
+      if (fieldName.includes('SERIAL') || fieldName.includes('SERIE') || fieldName.includes('SÉRIE')) {
+        serialVal = val;
+      } else if (fieldName.includes('GPON') || fieldName.includes('PON')) {
+        gponVal = val;
+      } else if (fieldName.includes('MAC')) {
+        macVal = val;
+      }
+    });
+
+    // Fallbacks de posição se não encontrar explicitamente pelo nome
+    if (!serialVal && scannedArray.length > 0) serialVal = scannedArray[0];
+    if (!macVal && scannedArray.length > 1) {
+      if (scannedArray.length === 2) macVal = scannedArray[1];
+      else if (scannedArray.length === 3) {
+        gponVal = scannedArray[1];
+        macVal = scannedArray[2];
+      }
+    }
+
+    // 1. Rule validation check
+    if (hasRuleError) {
+      playErrorBeep();
+      showAlertModal(
+        "VIOLAÇÃO DE REGRA DE BIPAGEM",
+        "Um ou mais campos não cumprem o formato/tamanho ou prefixo exigidos!",
+        "Verifique a mensagem de erro vermelha sob o campo."
+      );
+      return;
+    }
+
+    // 2. Inter-field duplicate check (e.g. SERIAL == MAC)
+    const interDup = checkInterFieldDuplicates(scannedArray);
+    if (interDup.hasDuplicate) {
+      playErrorBeep();
+      showAlertModal(
+        "BLOQUEIO DE VALORES DUPLICADOS",
+        `Não é permitido informar o mesmo valor em campos diferentes!`,
+        `Valor duplicado entre campos: <b>${interDup.duplicateVal}</b>`
+      );
+      return;
+    }
+
+    const dbItemToCheck = {
+      serial: serialVal,
+      gpon: gponVal,
+      mac: macVal
+    };
+
+    const dbDup = checkDatabaseDuplicates(dbItemToCheck, appState.units);
+    if (dbDup.isDuplicate) {
+      playErrorBeep();
+      showAlertModal(
+        "BLOQUEIO: UNIDADE JÁ RECEBIDA!",
+        `A unidade com ${dbDup.conflictField} "${dbDup.conflictVal}" JÁ FOI RECEBIDA no sistema!`,
+        `<b>Data do Recebimento Anterior:</b> ${dbDup.conflictRecord.dataRecebimento}<br>
+         <b>Recebido por:</b> ${dbDup.conflictRecord.operador}<br>
+         <b>Status Atual:</b> ${dbDup.conflictRecord.status}`
+      );
+      return;
+    }
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+    const newUnit = {
+      id: `UNI_${Date.now()}`,
+      fabricante: selectedModel.fabricante,
+      modelo: selectedModel.nome,
+      serial: dbItemToCheck.serial,
+      gpon: dbItemToCheck.gpon,
+      mac: dbItemToCheck.mac,
+      localidade: localidade,
+      operador: appState.currentUser.login,
+      dataRecebimento: dateStr,
+      status: 'RECEBIDO',
+      cosmetico: null,
+      funcional: null,
+      embalagem: null,
+      expedicao: null
+    };
+
     const res = await fetch('/api/units', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newUnit)
     });
-    if (!res.ok) throw new Error("Erro de resposta");
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        playErrorBeep();
+        showAlertModal(
+          "BLOQUEIO: UNIDADE JÁ RECEBIDA!",
+          errData.error || "Esta unidade já consta registrada no banco de dados.",
+          errData.existing ? `<b>Data do Recebimento Anterior:</b> ${errData.existing.data_recebimento}<br><b>Recebido por:</b> ${errData.existing.operador}<br><b>Status Atual:</b> ${errData.existing.status}` : ''
+        );
+        return;
+      }
+      throw new Error(errData.error || "Erro de resposta do servidor");
+    }
+
+    // SUCCESSFUL SCAN & RECEIVING!
+    playSuccessBeep();
 
     appState.units.push(newUnit);
     appState.currentRecebimentoSession.unshift(newUnit);
@@ -1469,7 +1510,9 @@ async function processRecebimentoSubmit(e) {
     showToast(`Unidade ${newUnit.serial} recebida com sucesso!`);
   } catch (err) {
     console.error(err);
-    alert("Erro ao salvar recebimento no servidor!");
+    alert("Erro ao salvar recebimento no servidor: " + err.message);
+  } finally {
+    isRecebimentoSubmitting = false;
   }
 }
 
@@ -1522,6 +1565,10 @@ function renderRecebimentoSessaoTable() {
 }
 
 function clearRecebimentoFields() {
+  if (autoRecebimentoTimeout) {
+    clearTimeout(autoRecebimentoTimeout);
+    autoRecebimentoTimeout = null;
+  }
   document.querySelectorAll('#dynamic-bip-inputs input').forEach((input, index) => {
     input.value = '';
     validateRecebimentoSingleInput(input);
