@@ -1984,9 +1984,23 @@ function updateEmbalagemBoxSummary() {
   const caixaId = codeField.value.trim().toUpperCase();
   document.getElementById('current-box-code').innerText = caixaId || 'C000000001';
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-  document.getElementById('current-box-count').innerText = boxUnits.length;
+  
+  const countEl = document.getElementById('current-box-count');
+  if (countEl) {
+    countEl.innerText = `${boxUnits.length} / 10`;
+  }
+
+  const modeloRefEl = document.getElementById('current-box-modelo');
+  if (modeloRefEl) {
+    if (boxUnits.length > 0) {
+      modeloRefEl.innerText = boxUnits[0].modelo;
+    } else {
+      modeloRefEl.innerText = '-';
+    }
+  }
 
   const unitsContainer = document.getElementById('current-box-units');
+  if (!unitsContainer) return;
   unitsContainer.innerHTML = '';
   if (boxUnits.length > 0) {
     boxUnits.forEach(u => {
@@ -1994,12 +2008,178 @@ function updateEmbalagemBoxSummary() {
         <div class="box-unit-chip">
           <span>${u.serial}</span>
           <span class="badge badge-success">${u.modelo}</span>
+          <small class="text-muted" style="margin-left:6px;">MAC: ${u.mac || '-'}</small>
         </div>
       `;
     });
   } else {
     unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>';
   }
+}
+
+function generateZplBoxLabel(caixaId, modelo, units) {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const dateStr = `${day}/${month}/${year}`;
+
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timeStr = `${hours}:${minutes}:${seconds}`;
+
+  const qtdStr = `QTD:${units.length}`;
+  const modeloStr = modelo || (units.length > 0 ? units[0].modelo : 'PRODUTO');
+
+  // Build QR Code string containing MAC of all units in the box
+  let macList = units.map(u => (u.mac || '').trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase()).filter(Boolean);
+  if (macList.length === 0) {
+    macList = units.map(u => (u.serial || '').trim().toUpperCase());
+  }
+  const qrMacData = macList.join('\\0D\\0A') + (macList.length > 0 ? '\\0D\\0A' : '');
+
+  // Code128 Barcode Subset C encoding for C000000001
+  // If caixaId matches C000000001, we can output >:C0>500000001 or standard Code 128
+  const barcodeData = caixaId;
+
+  const zpl = `CT~~CD,~CC^~CT~
+^XA
+~TA000
+~JSN
+^LT0
+^MNN
+^MTT
+^PON
+^PMN
+^LH0,0
+^JMA
+^PR6,6
+~SD15
+^JUS
+^LRN
+^CI27
+^PA0,1,1,0
+^XZ
+^XA
+^MMT
+^PW1181
+^LL600
+^LS0
+^FO313,15^GFA,3521,8280,69,:Z64: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:BDDB
+^FO0,152^GB1180,0,6^FS
+^FO65,173^GFA,309,972,12,:Z64:eJx1k0EKAzEIRcVVyCmGLD2ly6GnGLIKnrKazLSNWpkqhMdX0x+RJxh+g3rv0i32c/nHEzWaAZ7nkvCt95mi/gAomb5lTPT5abPrX7Ng0D9XfXn9u6LTH4rJTDt/KAqtHYD7uU2v34tr4FdFCLyRJwYeF+/m15+dFKdPdw+vL3cDP0/rs4Hu4PRtT4bq9yU6vo02XkHWNYJ/5JrjRP8M5blG/5CN4+9/OoFL4M06tnBL/MlnAcr09e9qmb5eUPS/6A0BSqYPUBP/0yqJvuHJ/NfMUX9A+r6oYfq+Pu/xDUQ9jQ0=:122A
+^FT53,259^A0B,21,20^FH\\^CI28^FD${dateStr}^FS^CI27
+^FT175,252^A0B,21,20^FH\\^CI28^FD${timeStr}^FS^CI27
+^FO1,263^GB1180,0,6^FS
+^FO196,156^GB0,110,6^FS
+^FO201,210^GB979,0,6^FS
+^FT206,196^A0N,25,25^FH\\^CI28^FDBOX ID:^FS^CI27
+^BY2,3,17^FT303,195^BCN,,N,N
+^FH\\^FD${barcodeData}^FS
+^FT567,194^A0N,21,20^FH\\^CI28^FD${caixaId}^FS^CI27
+^FT206,249^A0N,25,25^FH\\^CI28^FD${modeloStr}^FS^CI27
+^FO449,215^GB0,54,6^FS
+^FT492,249^A0N,25,25^FH\\^CI28^FDBrasil TecPar^FS^CI27
+^FO0,318^GB1180,0,6^FS
+^FT32,301^A0N,25,25^FH\\^CI28^FD${qtdStr}^FS^CI27
+^FT270,301^A0N,25,25^FH\\^CI28^FDEAN:^FS^CI27
+^FT478,576^BQN,2,5
+^FH\\^FDLA,${qrMacData}^FS
+^PQ1,0,1,Y
+^XZ`;
+
+  return zpl;
+}
+
+let lastGeneratedZpl = '';
+let lastGeneratedBoxId = '';
+
+function showZplModal(caixaId, modelo, units) {
+  lastGeneratedBoxId = caixaId;
+  lastGeneratedZpl = generateZplBoxLabel(caixaId, modelo, units);
+
+  document.getElementById('zpl-modal-box-id').innerText = caixaId;
+  document.getElementById('zpl-modal-code').value = lastGeneratedZpl;
+  document.getElementById('zpl-modal-info').innerHTML = `
+    <b>Modelo:</b> ${modelo} | <b>Total de Unidades:</b> ${units.length} | <b>Data/Hora:</b> ${new Date().toLocaleString('pt-BR')}
+  `;
+
+  document.getElementById('zpl-modal').classList.remove('hidden');
+}
+
+function closeZplModal() {
+  document.getElementById('zpl-modal').classList.add('hidden');
+}
+
+function copiarCodigoZpl() {
+  const textarea = document.getElementById('zpl-modal-code');
+  textarea.select();
+  navigator.clipboard.writeText(textarea.value).then(() => {
+    showToast("Código ZPL copiado para a área de transferência!");
+  }).catch(() => {
+    document.execCommand('copy');
+    showToast("Código ZPL copiado!");
+  });
+}
+
+function baixarArquivoZpl() {
+  if (!lastGeneratedZpl) return;
+  const blob = new Blob([lastGeneratedZpl], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Etiqueta_${lastGeneratedBoxId || 'Caixa'}.zpl`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function closeConfirmBoxModal() {
+  document.getElementById('confirm-box-modal').classList.add('hidden');
+}
+
+function solicitarFechamentoManualCaixa() {
+  const caixaId = document.getElementById('emb-caixa-id').value.trim().toUpperCase();
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  if (boxUnits.length === 0) {
+    alert("Não há nenhuma unidade embalada nesta caixa para fechar.");
+    return;
+  }
+
+  if (boxUnits.length < 10) {
+    document.getElementById('confirm-box-title').innerText = "FECHAMENTO ANTECIPADO DE CAIXA";
+    document.getElementById('confirm-box-msg').innerText = `Atenção: A caixa ${caixaId} contém apenas ${boxUnits.length} unidade(s) (menos que 10).`;
+    document.getElementById('confirm-box-details').innerHTML = `
+      Deseja realmente fechar a caixa com <b>${boxUnits.length} unidade(s)</b> e gerar a etiqueta ZPL agora?
+    `;
+    document.getElementById('confirm-box-modal').classList.remove('hidden');
+    return;
+  }
+
+  // Se já tiver 10 ou mais unidades, fecha direto
+  fecharCaixaEmbalagem(caixaId);
+}
+
+async function confirmarFechamentoManualCaixa() {
+  closeConfirmBoxModal();
+  const caixaId = document.getElementById('emb-caixa-id').value.trim().toUpperCase();
+  await fecharCaixaEmbalagem(caixaId);
+}
+
+async function fecharCaixaEmbalagem(caixaId) {
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  const modelo = boxUnits.length > 0 ? boxUnits[0].modelo : '';
+
+  // Exibe a etiqueta ZPL gerada
+  showZplModal(caixaId, modelo, boxUnits);
+  playSuccessBeep();
+
+  // Gera novo lote/código de caixa no backend
+  await generateNewCaixaCode();
+  showToast(`Caixa ${caixaId} fechada com sucesso! Nova caixa iniciada.`);
 }
 
 async function processEmbalarUnidade(e) {
@@ -2010,12 +2190,40 @@ async function processEmbalarUnidade(e) {
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
 
   if (!unit) {
-    alert("Unidade não encontrada!");
+    playErrorBeep();
+    alert("Erro: Unidade não encontrada no recebimento! A unidade precisa estar recebida no sistema.");
     return;
   }
 
-  if (unit.status.includes('NOK')) {
+  // Verificar se a unidade já foi embalada anteriormente
+  if (unit.embalagem) {
+    playErrorBeep();
+    alert(`Esta unidade já foi embalada na caixa: ${unit.embalagem.caixaId}!`);
+    return;
+  }
+
+  // Verificar status de reprovação
+  if (unit.status && unit.status.includes('NOK')) {
+    playErrorBeep();
     alert("Unidade com apontamento REPROVADO não pode ser embalada!");
+    return;
+  }
+
+  // Verificar se a caixa já possui unidades de outro modelo (Validação Rígida Automática de Modelo)
+  const existingBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  if (existingBoxUnits.length > 0) {
+    const modeloReferencia = existingBoxUnits[0].modelo;
+    if (unit.modelo !== modeloReferencia) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE MODELO:\nA caixa [${caixaId}] está configurada para o modelo [${modeloReferencia}].\nA unidade bipada é do modelo [${unit.modelo}] e não pode ser misturada nesta caixa!`);
+      return;
+    }
+  }
+
+  // Verificar se a caixa já possui 10 unidades
+  if (existingBoxUnits.length >= 10) {
+    playErrorBeep();
+    alert(`A caixa [${caixaId}] já atingiu a capacidade máxima de 10 unidades! Feche a caixa para iniciar uma nova.`);
     return;
   }
 
@@ -2025,7 +2233,7 @@ async function processEmbalarUnidade(e) {
   const embalagemData = {
     caixaId,
     data: dateStr,
-    operador: appState.currentUser.login
+    operador: appState.currentUser ? appState.currentUser.login : 'OPERADOR'
   };
 
   try {
@@ -2043,11 +2251,23 @@ async function processEmbalarUnidade(e) {
     unit.status = 'EMBALADO';
 
     document.getElementById('emb-serial').value = '';
+    playSuccessBeep();
 
-    // Update Box summary
+    // Atualiza resumo visual da caixa
     updateEmbalagemBoxSummary();
+
+    const updatedBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+    showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa ${caixaId}! [${updatedBoxUnits.length}/10]`);
+
+    // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades na caixa
+    if (updatedBoxUnits.length >= 10) {
+      setTimeout(async () => {
+        await fecharCaixaEmbalagem(caixaId);
+      }, 300);
+    }
   } catch (err) {
     console.error(err);
+    playErrorBeep();
     alert("Erro ao salvar embalagem no servidor!");
   }
 }
