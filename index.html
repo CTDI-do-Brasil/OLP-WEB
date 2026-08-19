@@ -1097,6 +1097,38 @@
                   </div>
                 </div>
               </div>
+
+              <!-- REIMPRESSÃO DE ETIQUETA DE CAIXA ANTERIOR -->
+              <div class="card glass-card margin-top" style="border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                <div class="card-header flex-between">
+                  <h3><i class="fa-solid fa-rotate-right"></i> Reimprimir Etiqueta de Caixa</h3>
+                </div>
+                <div class="card-body">
+                  <form id="form-reimprimir-caixa" onsubmit="reimprimirEtiquetaCaixa(event)">
+                    <div class="grid-3col">
+                      <div class="form-group">
+                        <label for="reimp-caixa-id"><i class="fa-solid fa-barcode"></i> Código da Caixa ou Serial/MAC *</label>
+                        <input type="text" id="reimp-caixa-id" placeholder="Ex: C000000001 ou Serial/MAC da unidade..." required style="text-transform: uppercase;">
+                      </div>
+
+                      <div class="form-group">
+                        <label for="reimp-printer-select"><i class="fa-solid fa-print"></i> Impressora Zebra (Destino)</label>
+                        <select id="reimp-printer-select">
+                          <option value="">-- Usar Impressora do Posto --</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <button type="submit" class="btn btn-primary btn-block">
+                          <i class="fa-solid fa-print"></i> Buscar & Reimprimir
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                  <div id="reimp-result-info" class="margin-top hidden"></div>
+                </div>
+              </div>
+
             </div>
           </div>
         </section>

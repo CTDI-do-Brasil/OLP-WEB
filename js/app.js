@@ -1174,13 +1174,15 @@ async function deletePrinter(id) {
 function populatePrinterDropdowns() {
   const embSelect = document.getElementById('emb-printer-select');
   const palletSelect = document.getElementById('pallet-printer-select');
+  const reimpSelect = document.getElementById('reimp-printer-select');
 
   const savedEmbPrinter = localStorage.getItem('wms_selected_printer_emb') || '';
   const savedPalletPrinter = localStorage.getItem('wms_selected_printer_pallet') || '';
 
   [
     { el: embSelect, saved: savedEmbPrinter },
-    { el: palletSelect, saved: savedPalletPrinter }
+    { el: palletSelect, saved: savedPalletPrinter },
+    { el: reimpSelect, saved: savedEmbPrinter }
   ].forEach(({ el, saved }) => {
     if (!el) return;
     el.innerHTML = '<option value="">-- Selecione a Impressora Zebra --</option>';
@@ -1192,6 +1194,61 @@ function populatePrinterDropdowns() {
       el.appendChild(opt);
     });
   });
+}
+
+async function reimprimirEtiquetaCaixa(e) {
+  if (e) e.preventDefault();
+  const query = document.getElementById('reimp-caixa-id').value.trim().toUpperCase();
+  const resultInfo = document.getElementById('reimp-result-info');
+
+  if (!query) {
+    alert("Informe o código da caixa ou o serial/MAC de uma unidade!");
+    return;
+  }
+
+  // 1. Procurar unidades por caixaId direto ou encontrar a unidade bipada para descobrir a caixaId
+  let targetCaixaId = query;
+  let boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+
+  if (boxUnits.length === 0) {
+    const singleUnit = appState.units.find(u => (u.serial === query || u.gpon === query || u.mac === query) && u.embalagem);
+    if (singleUnit) {
+      targetCaixaId = singleUnit.embalagem.caixaId;
+      boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+    }
+  }
+
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert(`Nenhuma caixa ou unidade embalada encontrada para a busca: "${query}".`);
+    if (resultInfo) {
+      resultInfo.classList.remove('hidden');
+      resultInfo.innerHTML = `<div class="alert alert-danger">Nenhum registro encontrado para "${query}".</div>`;
+    }
+    return;
+  }
+
+  const modelo = boxUnits[0].modelo || 'PRODUTO';
+
+  // Obter a impressora selecionada no form ou a padrão
+  const reimpSelectVal = document.getElementById('reimp-printer-select') ? document.getElementById('reimp-printer-select').value : null;
+  if (reimpSelectVal) {
+    localStorage.setItem('wms_selected_printer_emb', reimpSelectVal);
+  }
+
+  if (resultInfo) {
+    resultInfo.classList.remove('hidden');
+    resultInfo.innerHTML = `
+      <div class="alert alert-info">
+        <strong>Caixa Encontrada:</strong> ${targetCaixaId} | <b>Modelo:</b> ${modelo} | <b>Unidades:</b> ${boxUnits.length}
+      </div>
+    `;
+  }
+
+  // Abre o modal com a etiqueta ZPL e opção de disparar impressão
+  showZplModal(targetCaixaId, modelo, boxUnits);
+  playSuccessBeep();
+  showToast(`Caixa ${targetCaixaId} carregada para reimpressão!`);
 }
 
 function saveSelectedPrinterPreference(viewType) {
