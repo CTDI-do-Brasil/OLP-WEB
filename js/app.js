@@ -20,6 +20,7 @@ let appState = {
   locations: [],
   units: [],
   defectCodes: [],
+  printers: [],
   currentRecebimentoSession: [],
   currentReportSubmenu: 'recebimento',
   currentDefectCategory: 'cosmetico',
@@ -52,12 +53,13 @@ if (document.readyState === 'loading') {
 
 async function loadStateFromServer() {
   try {
-    const [usersRes, modelsRes, locationsRes, unitsRes, defectsRes] = await Promise.all([
+    const [usersRes, modelsRes, locationsRes, unitsRes, defectsRes, printersRes] = await Promise.all([
       fetch('/api/users'),
       fetch('/api/models'),
       fetch('/api/locations'),
       fetch('/api/units'),
-      fetch('/api/defect-codes')
+      fetch('/api/defect-codes'),
+      fetch('/api/printers')
     ]);
 
     if (!usersRes.ok || !modelsRes.ok || !locationsRes.ok || !unitsRes.ok || !defectsRes.ok) {
@@ -69,9 +71,11 @@ async function loadStateFromServer() {
     appState.locations = await locationsRes.json();
     appState.units = await unitsRes.json();
     appState.defectCodes = await defectsRes.json();
+    appState.printers = printersRes.ok ? await printersRes.json() : [];
   } catch (e) {
     console.warn("Erro ao carregar dados do servidor, utilizando fallback local:", e);
     appState.defectCodes = [];
+    appState.printers = [];
     // Fallback locally
     try {
       const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
@@ -349,6 +353,7 @@ function navigate(viewId) {
   if (viewId === 'cadastro-modelo') renderModelosTable();
   if (viewId === 'cadastro-usuario') renderUsuariosTable();
   if (viewId === 'cadastro-localidade') renderLocalidadesTable();
+  if (viewId === 'cadastro-impressora') renderPrintersTable();
   if (viewId === 'recebimento') resetRecebimentoForm();
   if (viewId === 'consulta') filterConsulta();
   if (viewId === 'embalagem') initEmbalagemView();
@@ -361,6 +366,7 @@ function updatePageTitle(viewId) {
     'cadastro-modelo': { title: 'Cadastro de Modelos & Regras', sub: 'Gerenciamento de fabricantes, campos e travas de bipagem' },
     'cadastro-usuario': { title: 'Cadastro de Usuários', sub: 'Gestão de acessos (Administradores e Operadores)' },
     'cadastro-localidade': { title: 'Cadastro de Localidades', sub: 'Mapeamento de docas e áreas de armazenagem' },
+    'cadastro-impressora': { title: 'Cadastro de Impressoras Zebra', sub: 'Gerenciamento de impressoras térmicas ZPL por IP e Posto de Trabalho' },
     'recebimento': { title: 'Recebimento de Unidades', sub: 'Entrada de equipamentos com validação rígida de regras' },
     'apontamento-cosmetico': { title: 'Apontamento Cosmético', sub: 'Inspeção estética e estática de unidades' },
     'apontamento-funcional': { title: 'Apontamento Funcional', sub: 'Testes de conectividade e hardware' },
@@ -1026,6 +1032,170 @@ async function deleteLocalidade(id) {
       console.error(err);
       alert("Erro ao remover localidade do servidor!");
     }
+  }
+}
+
+/* ==========================================================================
+   CADASTRO DE IMPRESSORAS ZEBRA
+   ========================================================================== */
+
+async function savePrinter(e) {
+  e.preventDefault();
+  const id = document.getElementById('prt-id').value.trim();
+  const nome = document.getElementById('prt-nome').value.trim();
+  const posto = document.getElementById('prt-posto').value.trim();
+  const ip = document.getElementById('prt-ip').value.trim();
+  const porta = parseInt(document.getElementById('prt-porta').value.trim()) || 9100;
+  const modelo = document.getElementById('prt-modelo').value.trim();
+  const status = document.getElementById('prt-status').value;
+
+  const printerObj = {
+    id: id || `PRT_${Date.now()}`,
+    nome,
+    posto,
+    ip,
+    porta,
+    modelo,
+    status
+  };
+
+  try {
+    const method = id ? 'PUT' : 'POST';
+    const url = id ? `/api/printers/${id}` : '/api/printers';
+
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(printerObj)
+    });
+    if (!res.ok) throw new Error("Erro ao salvar impressora");
+
+    if (id) {
+      const idx = appState.printers.findIndex(p => p.id === id);
+      if (idx !== -1) appState.printers[idx] = printerObj;
+    } else {
+      appState.printers.push(printerObj);
+    }
+
+    renderPrintersTable();
+    populatePrinterDropdowns();
+    resetPrinterForm();
+    showToast(`Impressora "${nome}" salva com sucesso!`);
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao salvar impressora no servidor: " + err.message);
+  }
+}
+
+function renderPrintersTable() {
+  const tbody = document.getElementById('table-printers-body');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (appState.printers.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhuma impressora cadastrada ainda.</td></tr>';
+    return;
+  }
+
+  appState.printers.forEach(p => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>
+        <strong>${p.nome}</strong>
+        ${p.modelo ? `<br><small class="text-muted">${p.modelo}</small>` : ''}
+      </td>
+      <td><span class="badge badge-info">${p.posto}</span></td>
+      <td><code>${p.ip}:${p.porta || 9100}</code></td>
+      <td>
+        <span class="badge ${p.status === 'ATIVA' ? 'badge-success' : 'badge-danger'}">
+          ${p.status || 'ATIVA'}
+        </span>
+      </td>
+      <td>
+        <div class="flex-row gap-1">
+          <button class="btn btn-outline btn-sm" onclick="editPrinter('${p.id}')" title="Editar">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deletePrinter('${p.id}')" title="Excluir">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function editPrinter(id) {
+  const p = appState.printers.find(x => x.id === id);
+  if (!p) return;
+
+  document.getElementById('prt-id').value = p.id;
+  document.getElementById('prt-nome').value = p.nome;
+  document.getElementById('prt-posto').value = p.posto;
+  document.getElementById('prt-ip').value = p.ip;
+  document.getElementById('prt-porta').value = p.porta || 9100;
+  document.getElementById('prt-modelo').value = p.modelo || '';
+  document.getElementById('prt-status').value = p.status || 'ATIVA';
+
+  document.getElementById('btn-save-printer').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Atualizar Impressora';
+}
+
+function resetPrinterForm() {
+  const form = document.getElementById('form-cadastro-impressora');
+  if (form) form.reset();
+  document.getElementById('prt-id').value = '';
+  document.getElementById('prt-porta').value = '9100';
+  document.getElementById('btn-save-printer').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Salvar Impressora';
+}
+
+async function deletePrinter(id) {
+  if (confirm("Deseja realmente excluir esta impressora?")) {
+    try {
+      const res = await fetch(`/api/printers/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error("Erro de resposta");
+
+      appState.printers = appState.printers.filter(p => p.id !== id);
+      renderPrintersTable();
+      populatePrinterDropdowns();
+      showToast("Impressora removida com sucesso!");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao remover impressora do servidor!");
+    }
+  }
+}
+
+function populatePrinterDropdowns() {
+  const embSelect = document.getElementById('emb-printer-select');
+  const palletSelect = document.getElementById('pallet-printer-select');
+
+  const savedEmbPrinter = localStorage.getItem('wms_selected_printer_emb') || '';
+  const savedPalletPrinter = localStorage.getItem('wms_selected_printer_pallet') || '';
+
+  [
+    { el: embSelect, saved: savedEmbPrinter },
+    { el: palletSelect, saved: savedPalletPrinter }
+  ].forEach(({ el, saved }) => {
+    if (!el) return;
+    el.innerHTML = '<option value="">-- Selecione a Impressora Zebra --</option>';
+    appState.printers.filter(p => p.status === 'ATIVA').forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.innerText = `${p.nome} - [${p.posto}] (${p.ip}:${p.porta || 9100})`;
+      if (p.id === saved) opt.selected = true;
+      el.appendChild(opt);
+    });
+  });
+}
+
+function saveSelectedPrinterPreference(viewType) {
+  if (viewType === 'embalagem') {
+    const val = document.getElementById('emb-printer-select').value;
+    localStorage.setItem('wms_selected_printer_emb', val);
+  } else if (viewType === 'pallet') {
+    const val = document.getElementById('pallet-printer-select').value;
+    localStorage.setItem('wms_selected_printer_pallet', val);
   }
 }
 
@@ -1963,6 +2133,7 @@ async function initEmbalagemView() {
     codeField.value = code;
     updateEmbalagemBoxSummary();
   }
+  populatePrinterDropdowns();
 }
 
 async function generateNewCaixaCode() {
@@ -2134,6 +2305,55 @@ function baixarArquivoZpl() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+async function imprimirZplDiretoImpressora() {
+  if (!lastGeneratedZpl) {
+    alert("Nenhum código ZPL disponível para impressão.");
+    return;
+  }
+
+  // Get active printer from dropdown preference or list
+  const selectedPrinterId = localStorage.getItem('wms_selected_printer_emb') || 
+                            localStorage.getItem('wms_selected_printer_pallet') || 
+                            (appState.printers.length > 0 ? appState.printers[0].id : null);
+
+  const printer = appState.printers.find(p => p.id === selectedPrinterId);
+
+  if (!printer) {
+    alert("Nenhuma impressora Zebra selecionada ou cadastrada! Cadastre uma impressora em 'Cadastros > Impressoras Zebra' e selecione-a na tela de Embalagem.");
+    return;
+  }
+
+  try {
+    showToast(`Enviando etiqueta para impressora ${printer.nome} (${printer.ip})...`);
+
+    // Envia para o serviço local Python (Micro-serviço Zebra Socket)
+    const response = await fetch('http://localhost:5000/print', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ip: printer.ip,
+        port: printer.porta || 9100,
+        zpl: lastGeneratedZpl,
+        boxId: lastGeneratedBoxId,
+        printerName: printer.nome,
+        posto: printer.posto
+      })
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      playSuccessBeep();
+      showToast(`Impressão enviada com sucesso para ${printer.nome} [${printer.posto}]!`);
+    } else {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || "Erro de comunicação com o serviço local");
+    }
+  } catch (err) {
+    console.warn("Serviço Python local não detectado ou erro de socket:", err);
+    alert(`Atenção: Não foi possível conectar ao Agente Python local (http://localhost:5000).\n\nCertifique-se de executar o script Python "print_agent.py" na máquina do operador para envio direto via rede/IP.\n\nVocê também pode copiar o ZPL ou baixar o arquivo .zpl.`);
+  }
 }
 
 function closeConfirmBoxModal() {

@@ -493,6 +493,68 @@ app.delete('/api/defect-codes/:id', async (req, res) => {
   }
 });
 
+// PRINTERS ENDPOINTS
+app.get('/api/printers', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM printers ORDER BY posto ASC, nome ASC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/printers', async (req, res) => {
+  const { id, nome, ip, porta, modelo, posto, status } = req.body;
+  try {
+    await pool.query(
+      `INSERT INTO printers (id, nome, ip, porta, modelo, posto, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (id) DO UPDATE SET 
+         nome = EXCLUDED.nome,
+         ip = EXCLUDED.ip,
+         porta = EXCLUDED.porta,
+         modelo = EXCLUDED.modelo,
+         posto = EXCLUDED.posto,
+         status = EXCLUDED.status`,
+      [id || `PRT_${Date.now()}`, nome, ip, porta || 9100, modelo || '', posto, status || 'ATIVA']
+    );
+    res.status(201).json({ success: true, message: 'Impressora cadastrada com sucesso!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/printers/:id', async (req, res) => {
+  const { id } = req.params;
+  const { nome, ip, porta, modelo, posto, status } = req.body;
+  try {
+    await pool.query(
+      `UPDATE printers SET 
+        nome = COALESCE($1, nome),
+        ip = COALESCE($2, ip),
+        porta = COALESCE($3, porta),
+        modelo = COALESCE($4, modelo),
+        posto = COALESCE($5, posto),
+        status = COALESCE($6, status)
+       WHERE id = $7`,
+      [nome, ip, porta, modelo, posto, status, id]
+    );
+    res.json({ success: true, message: 'Impressora atualizada!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/printers/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM printers WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Impressora removida!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // SEQUENCE GENERATION ENDPOINTS
 app.get('/api/sequence/caixa_pallet/current', async (req, res) => {
   try {

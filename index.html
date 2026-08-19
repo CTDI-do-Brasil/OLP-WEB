@@ -96,6 +96,10 @@
             <i class="fa-solid fa-warehouse"></i>
             <span>Localidades</span>
           </a>
+          <a href="#cadastro-impressora" class="nav-item nav-sub" onclick="navigate('cadastro-impressora')">
+            <i class="fa-solid fa-print"></i>
+            <span>Impressoras Zebra</span>
+          </a>
 
           <!-- CÓDIGOS DE DEFEITO Accordion -->
           <div class="nav-accordion">
@@ -567,7 +571,91 @@
           </div>
         </section>
 
-        <!-- 4.1 CADASTRO DE CÓDIGO DE DEFEITO VIEW (ADMIN) -->
+        <!-- 3.5 CADASTRO DE IMPRESSORAS ZEBRA VIEW (ADMIN) -->
+        <section id="view-cadastro-impressora" class="page-view">
+          <div class="grid-2col">
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-print"></i> Nova Impressora Zebra</h3>
+              </div>
+              <div class="card-body">
+                <form id="form-cadastro-impressora" onsubmit="savePrinter(event)">
+                  <input type="hidden" id="prt-id">
+
+                  <div class="form-group">
+                    <label for="prt-nome"><i class="fa-solid fa-tag"></i> Nome / Identificação *</label>
+                    <input type="text" id="prt-nome" placeholder="Ex: Zebra Bancada 01" required>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="prt-posto"><i class="fa-solid fa-desktop"></i> Posto / Local de Trabalho *</label>
+                    <input type="text" id="prt-posto" placeholder="Ex: Posto Embalagem 01, Bancada Triagem..." required>
+                  </div>
+
+                  <div class="grid-2col">
+                    <div class="form-group">
+                      <label for="prt-ip"><i class="fa-solid fa-network-wired"></i> Endereço IP *</label>
+                      <input type="text" id="prt-ip" placeholder="Ex: 192.168.1.150" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="prt-porta"><i class="fa-solid fa-door-open"></i> Porta TCP *</label>
+                      <input type="number" id="prt-porta" value="9100" required>
+                    </div>
+                  </div>
+
+                  <div class="grid-2col">
+                    <div class="form-group">
+                      <label for="prt-modelo"><i class="fa-solid fa-barcode"></i> Modelo / Observação</label>
+                      <input type="text" id="prt-modelo" placeholder="Ex: ZD220, ZT410">
+                    </div>
+
+                    <div class="form-group">
+                      <label for="prt-status"><i class="fa-solid fa-toggle-on"></i> Status</label>
+                      <select id="prt-status">
+                        <option value="ATIVA">ATIVA</option>
+                        <option value="INATIVA">INATIVA</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="flex-row gap-2">
+                    <button type="submit" class="btn btn-primary flex-1" id="btn-save-printer">
+                      <i class="fa-solid fa-floppy-disk"></i> Salvar Impressora
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="resetPrinterForm()">
+                      <i class="fa-solid fa-rotate-left"></i> Limpar
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+
+            <div class="card glass-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-list-check"></i> Impressoras Cadastradas</h3>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Nome</th>
+                        <th>Posto</th>
+                        <th>IP / Porta</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-printers-body">
+                      <!-- Dynamic rows -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
         <section id="view-cadastro-defeito" class="page-view">
           <div class="grid-2col">
             <div class="card glass-card">
@@ -949,11 +1037,20 @@
             <div class="card-body">
               <div class="grid-2col">
                 <form id="form-embalagem" onsubmit="processEmbalarUnidade(event)">
-                  <div class="form-group">
-                    <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
-                    <div class="flex-row">
-                      <input type="text" id="emb-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
-                      <button type="button" class="btn btn-secondary" onclick="generateNewCaixaCode()">Nova Caixa</button>
+                  <div class="grid-2col">
+                    <div class="form-group">
+                      <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
+                      <div class="flex-row">
+                        <input type="text" id="emb-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
+                        <button type="button" class="btn btn-secondary" onclick="generateNewCaixaCode()">Nova Caixa</button>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="emb-printer-select"><i class="fa-solid fa-print"></i> Impressora Zebra (IP/Posto)</label>
+                      <select id="emb-printer-select" onchange="saveSelectedPrinterPreference('embalagem')">
+                        <option value="">Nenhuma impressora selecionada</option>
+                      </select>
                     </div>
                   </div>
 
@@ -1005,11 +1102,20 @@
               <div class="grid-2col">
                 <div>
                   <form id="form-pallet" onsubmit="processPalletUnidade(event)">
-                    <div class="form-group">
-                      <label for="pallet-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
-                      <div class="flex-row">
-                        <input type="text" id="pallet-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
-                        <button type="button" class="btn btn-secondary" onclick="generateNewPalletBoxCode()">Nova Caixa</button>
+                    <div class="grid-2col">
+                      <div class="form-group">
+                        <label for="pallet-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
+                        <div class="flex-row">
+                          <input type="text" id="pallet-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
+                          <button type="button" class="btn btn-secondary" onclick="generateNewPalletBoxCode()">Nova Caixa</button>
+                        </div>
+                      </div>
+
+                      <div class="form-group">
+                        <label for="pallet-printer-select"><i class="fa-solid fa-print"></i> Impressora Zebra (IP/Posto)</label>
+                        <select id="pallet-printer-select" onchange="saveSelectedPrinterPreference('pallet')">
+                          <option value="">Nenhuma impressora selecionada</option>
+                        </select>
                       </div>
                     </div>
 
@@ -1298,11 +1404,14 @@
           <textarea id="zpl-modal-code" class="bg-dark-input" rows="8" readonly style="font-family: monospace; font-size: 0.85rem;"></textarea>
         </div>
         <div class="flex-row gap-2 margin-top">
-          <button type="button" class="btn btn-primary" onclick="copiarCodigoZpl()">
+          <button type="button" class="btn btn-primary" onclick="imprimirZplDiretoImpressora()">
+            <i class="fa-solid fa-print"></i> Imprimir na Zebra (IP)
+          </button>
+          <button type="button" class="btn btn-outline" onclick="copiarCodigoZpl()">
             <i class="fa-solid fa-copy"></i> Copiar ZPL
           </button>
           <button type="button" class="btn btn-success" onclick="baixarArquivoZpl()">
-            <i class="fa-solid fa-download"></i> Baixar Arquivo .zpl
+            <i class="fa-solid fa-download"></i> Baixar .zpl
           </button>
           <button type="button" class="btn btn-secondary" onclick="closeZplModal()">
             <i class="fa-solid fa-xmark"></i> Fechar

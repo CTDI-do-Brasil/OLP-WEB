@@ -53,5 +53,16 @@ CREATE TABLE IF NOT EXISTS defect_codes (
   CONSTRAINT unique_category_code UNIQUE (categoria, codigo)
 );
 
+-- 6. Printers Table
+CREATE TABLE IF NOT EXISTS printers (
+  id VARCHAR(100) PRIMARY KEY,
+  nome VARCHAR(100) NOT NULL,
+  ip VARCHAR(100) NOT NULL,
+  porta INTEGER NOT NULL DEFAULT 9100,
+  modelo VARCHAR(100),
+  posto VARCHAR(100) NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'ATIVA'
+);
+
 
 
