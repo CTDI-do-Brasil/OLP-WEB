@@ -543,8 +543,7 @@ app.get('/api/sequence/caixa/current', async (req, res) => {
     const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'caixa'");
     const currentVal = result.rows[0] ? result.rows[0].current_value : 0;
     const nextSeq = currentVal + 1;
-    const year = new Date().getFullYear();
-    const formatted = `CX-${year}-${String(nextSeq).padStart(3, '0')}`;
+    const formatted = 'C' + String(nextSeq).padStart(9, '0');
     res.json({ formatted, sequence: nextSeq });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -571,8 +570,7 @@ app.post('/api/sequence/caixa/next', async (req, res) => {
       );
     }
     await client.query('COMMIT');
-    const year = new Date().getFullYear();
-    const formatted = `CX-${year}-${String(nextVal).padStart(3, '0')}`;
+    const formatted = 'C' + String(nextVal).padStart(9, '0');
     res.json({ formatted, sequence: nextVal });
   } catch (err) {
     await client.query('ROLLBACK');

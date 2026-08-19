@@ -1938,7 +1938,7 @@ async function fetchCurrentCaixaCodeFromServer() {
     return data.formatted;
   } catch (err) {
     console.error(err);
-    return 'CX-2026-001';
+    return 'C000000001';
   }
 }
 
@@ -1982,7 +1982,7 @@ function updateEmbalagemBoxSummary() {
   const codeField = document.getElementById('emb-caixa-id');
   if (!codeField) return;
   const caixaId = codeField.value.trim().toUpperCase();
-  document.getElementById('current-box-code').innerText = caixaId || 'CX-2026-001';
+  document.getElementById('current-box-code').innerText = caixaId || 'C000000001';
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
   document.getElementById('current-box-count').innerText = boxUnits.length;
 
