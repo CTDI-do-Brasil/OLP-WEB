@@ -2200,14 +2200,24 @@ async function initEmbalagemView() {
 
 async function generateNewCaixaCode() {
   const codeField = document.getElementById('emb-caixa-id');
-  if (codeField) {
-    codeField.placeholder = "Carregando...";
-    const code = await generateNextCaixaCodeFromServer();
-    if (code) {
-      codeField.value = code;
-      updateEmbalagemBoxSummary();
-      showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
-    }
+  if (!codeField) return;
+
+  const currentCaixaId = codeField.value.trim().toUpperCase();
+  const currentBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentCaixaId);
+
+  // BLOQUEIO: Não permitir gerar nova caixa se a atual estiver sem nenhuma unidade registrada
+  if (currentCaixaId && currentBoxUnits.length === 0) {
+    playErrorBeep();
+    alert(`A caixa atual [${currentCaixaId}] não possui nenhuma unidade registrada!\n\nVocê só pode gerar uma nova caixa após registrar pelo menos 1 unidade ou fechar a caixa atual.`);
+    return;
+  }
+
+  codeField.placeholder = "Carregando...";
+  const code = await generateNextCaixaCodeFromServer();
+  if (code) {
+    codeField.value = code;
+    updateEmbalagemBoxSummary();
+    showToast(`Nova caixa sequencial ${code} iniciada no servidor!`);
   }
 }
 
@@ -2654,14 +2664,24 @@ async function initPalletView() {
 
 async function generateNewPalletBoxCode() {
   const codeField = document.getElementById('pallet-caixa-id');
-  if (codeField) {
-    codeField.placeholder = "Carregando...";
-    const code = await generateNextPalletBoxCodeFromServer();
-    if (code) {
-      codeField.value = code;
-      updatePalletBoxSummary();
-      showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
-    }
+  if (!codeField) return;
+
+  const currentCaixaId = codeField.value.trim().toUpperCase();
+  const currentBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentCaixaId);
+
+  // BLOQUEIO: Não permitir gerar nova caixa de pallet se a atual estiver sem nenhuma unidade
+  if (currentCaixaId && currentBoxUnits.length === 0) {
+    playErrorBeep();
+    alert(`A caixa/pallet atual [${currentCaixaId}] não possui nenhuma unidade registrada!\n\nVocê só pode gerar uma nova caixa após registrar pelo menos 1 unidade.`);
+    return;
+  }
+
+  codeField.placeholder = "Carregando...";
+  const code = await generateNextPalletBoxCodeFromServer();
+  if (code) {
+    codeField.value = code;
+    updatePalletBoxSummary();
+    showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
   }
 }
 
