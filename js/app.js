@@ -2595,6 +2595,17 @@ async function imprimirZplDiretoImpressora() {
   }
 }
 
+// Conjunto para controlar caixas já fechadas/impressas
+let caixasImpressasSet = new Set();
+
+function isCaixaJaFechadaEImpressa(caixaId) {
+  if (!caixaId) return false;
+  // Verifica se já está no set local ou se todas as unidades estão marcadas como fechadas
+  if (caixasImpressasSet.has(caixaId)) return true;
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  return boxUnits.length > 0 && boxUnits.every(u => u.embalagem.fechada === true);
+}
+
 function closeConfirmBoxModal() {
   document.getElementById('confirm-box-modal').classList.add('hidden');
 }
@@ -2604,7 +2615,15 @@ function solicitarFechamentoManualCaixa() {
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
 
   if (boxUnits.length === 0) {
+    playErrorBeep();
     alert("Não há nenhuma unidade embalada nesta caixa para fechar.");
+    return;
+  }
+
+  // TRAVA DE SEGURANÇA: Se a caixa já foi fechada/impressa, não permite imprimir novamente por este botão
+  if (isCaixaJaFechadaEImpressa(caixaId)) {
+    playErrorBeep();
+    alert(`BLOQUEIO DE DUPLICIDADE:\nA caixa [${caixaId}] já foi FECHADA e teve sua etiqueta impressa!\n\nNão é permitido imprimir múltiplas etiquetas aqui. Para emitir uma 2ª via, utilize a opção "Reimprimir Etiqueta" ou o menu "Consulta / Ajustes".`);
     return;
   }
 
@@ -2612,7 +2631,7 @@ function solicitarFechamentoManualCaixa() {
     document.getElementById('confirm-box-title').innerText = "FECHAMENTO ANTECIPADO DE CAIXA";
     document.getElementById('confirm-box-msg').innerText = `Atenção: A caixa ${caixaId} contém apenas ${boxUnits.length} unidade(s) (menos que 10).`;
     document.getElementById('confirm-box-details').innerHTML = `
-      Deseja realmente fechar a caixa com <b>${boxUnits.length} unidade(s)</b> e gerar a etiqueta ZPL agora?
+      Deseja realmente fechar a caixa com <b>${boxUnits.length} unidade(s)</b> e gerar a etiqueta ZPL única agora?
     `;
     document.getElementById('confirm-box-modal').classList.remove('hidden');
     return;
@@ -2629,16 +2648,51 @@ async function confirmarFechamentoManualCaixa() {
 }
 
 async function fecharCaixaEmbalagem(caixaId) {
+  // TRAVA DE IMPRESSÃO ÚNICA: Evitar disparos repetidos
+  if (isCaixaJaFechadaEImpressa(caixaId)) {
+    playErrorBeep();
+    alert(`A etiqueta da caixa [${caixaId}] já foi impressa! Utilize a busca de reimpressão se precisar de uma 2ª via.`);
+    return;
+  }
+
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
   const modelo = boxUnits.length > 0 ? boxUnits[0].modelo : '';
 
-  // Exibe a etiqueta ZPL gerada
+  // Marca no estado local e backend que a caixa foi fechada
+  caixasImpressasSet.add(caixaId);
+  for (const u of boxUnits) {
+    if (u.embalagem) {
+      u.embalagem.fechada = true;
+      // Salva de forma não bloqueante no backend
+      fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'EMBALADO',
+          embalagem: u.embalagem
+        })
+      }).catch(err => console.error("Erro ao persistir fechamento da caixa:", err));
+    }
+  }
+
+  // Exibe a etiqueta ZPL gerada e envia apenas 1 cópia para a impressora
   showZplModal(caixaId, modelo, boxUnits);
   playSuccessBeep();
 
+  // Tenta imprimir direto 1 única vez se houver impressora configurada
+  try {
+    const selectedPrinterId = localStorage.getItem('wms_selected_printer_emb') || 
+                              (appState.printers.length > 0 ? appState.printers[0].id : null);
+    if (selectedPrinterId) {
+      await imprimirZplDiretoImpressora();
+    }
+  } catch (printErr) {
+    console.warn("Impressão automática direta falhou:", printErr);
+  }
+
   // Gera novo lote/código de caixa no backend
   await generateNewCaixaCode();
-  showToast(`Caixa ${caixaId} fechada com sucesso! Nova caixa iniciada.`);
+  showToast(`Caixa ${caixaId} fechada e etiqueta única impressa! Nova caixa iniciada.`);
 }
 
 async function processEmbalarUnidade(e) {
