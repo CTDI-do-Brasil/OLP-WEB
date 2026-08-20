@@ -3026,30 +3026,38 @@ function carregarListaTodasCaixas() {
 
   // Preencher Tabela
   if (caixas.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding: 20px;">Nenhuma caixa embalada encontrada no sistema.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 20px;">Nenhuma caixa embalada encontrada no sistema.</td></tr>';
     return;
   }
 
-  tbody.innerHTML = caixas.map(c => `
-    <tr>
-      <td><strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
-      <td>${c.modelo}</td>
-      <td>${c.localidade}</td>
-      <td><span class="badge ${c.unidades.length >= 10 ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / 10</span></td>
-      <td>${c.data}</td>
-      <td style="text-align: center;">
-        <button type="button" class="btn btn-primary btn-sm" onclick="selecionarCaixaRapida('${c.caixaId}')" title="Consultar e Ajustar Caixa">
-          <i class="fa-solid fa-pen-to-square"></i> Ajustar
-        </button>
-        <button type="button" class="btn btn-outline btn-sm" onclick="reimprimirEtiquetaPorCaixaId('${c.caixaId}')" title="Reimprimir Etiqueta ZPL" style="margin-left: 5px;">
-          <i class="fa-solid fa-print"></i>
-        </button>
-        <button type="button" class="btn btn-danger btn-sm" onclick="excluirCaixaDireto('${c.caixaId}')" title="Excluir Caixa" style="margin-left: 5px;">
-          <i class="fa-solid fa-trash-can"></i>
-        </button>
-      </td>
-    </tr>
-  `).join('');
+  tbody.innerHTML = caixas.map(c => {
+    const isFechada = c.unidades.length >= 10 || c.unidades.some(u => u.embalagem && u.embalagem.fechada);
+    const statusBadge = isFechada 
+      ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>`
+      : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>`;
+
+    return `
+      <tr>
+        <td><strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
+        <td>${c.modelo}</td>
+        <td>${c.localidade}</td>
+        <td><span class="badge ${c.unidades.length >= 10 ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / 10</span></td>
+        <td>${statusBadge}</td>
+        <td>${c.data}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="selecionarCaixaRapida('${c.caixaId}')" title="Consultar e Ajustar Caixa">
+            <i class="fa-solid fa-pen-to-square"></i> Ajustar
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="reimprimirEtiquetaPorCaixaId('${c.caixaId}')" title="Reimprimir Etiqueta ZPL" style="margin-left: 5px;">
+            <i class="fa-solid fa-print"></i>
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="excluirCaixaDireto('${c.caixaId}')" title="Excluir Caixa" style="margin-left: 5px;">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function buscarCaixaParaAjuste() {
@@ -3114,6 +3122,14 @@ function exibirDetalhesCaixaParaAjuste(caixaId) {
   document.getElementById('ajuste-detalhe-modelo').innerText = modelo;
   document.getElementById('ajuste-detalhe-localidade').innerText = localidade;
   document.getElementById('ajuste-detalhe-total').innerText = `${boxUnits.length} / 10 Unidades`;
+
+  const isFechada = boxUnits.length >= 10 || boxUnits.some(u => u.embalagem && u.embalagem.fechada);
+  const statusContainer = document.getElementById('ajuste-detalhe-status');
+  if (statusContainer) {
+    statusContainer.innerHTML = isFechada 
+      ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>` 
+      : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA (${boxUnits.length}/10)</span>`;
+  }
 
   const tbody = document.getElementById('tbody-ajuste-unidades-caixa');
   tbody.innerHTML = boxUnits.map((u, idx) => `
