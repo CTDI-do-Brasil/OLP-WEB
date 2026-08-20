@@ -2199,55 +2199,7 @@ async function initEmbalagemView() {
     }
     updateEmbalagemBoxSummary();
   }
-  atualizarSelectCaixasAbertas();
   populatePrinterDropdowns();
-}
-
-function atualizarSelectCaixasAbertas() {
-  const selectEl = document.getElementById('emb-caixas-abertas-select');
-  const countEl = document.getElementById('count-caixas-abertas');
-  if (!selectEl) return;
-
-  const currentCaixaId = (document.getElementById('emb-caixa-id')?.value || '').trim().toUpperCase();
-
-  // Agrupar todas as caixas com unidades embaladas
-  const caixasMap = {};
-  appState.units.forEach(u => {
-    if (u.embalagem && u.embalagem.caixaId) {
-      const cId = u.embalagem.caixaId;
-      if (!caixasMap[cId]) {
-        caixasMap[cId] = {
-          caixaId: cId,
-          modelo: u.modelo || '-',
-          localidade: u.localidade || '-',
-          count: 0
-        };
-      }
-      caixasMap[cId].count++;
-    }
-  });
-
-  const caixas = Object.values(caixasMap).sort((a, b) => b.caixaId.localeCompare(a.caixaId));
-  if (countEl) {
-    countEl.innerText = caixas.length;
-  }
-
-  selectEl.innerHTML = '<option value="">-- Selecionar / Alternar para outra Caixa Aberta --</option>';
-  caixas.forEach(c => {
-    const isSelected = (c.caixaId === currentCaixaId) ? 'selected' : '';
-    selectEl.innerHTML += `<option value="${c.caixaId}" ${isSelected}>Caixa ${c.caixaId} - ${c.modelo} (${c.count}/10 un) - ${c.localidade}</option>`;
-  });
-}
-
-function alternarCaixaAtiva(caixaId) {
-  if (!caixaId) return;
-  const codeField = document.getElementById('emb-caixa-id');
-  if (!codeField) return;
-
-  codeField.value = caixaId;
-  updateEmbalagemBoxSummary();
-  showToast(`Caixa ativa alterada para: ${caixaId}`);
-  playSuccessBeep();
 }
 
 async function generateNewCaixaCode() {
@@ -2268,8 +2220,7 @@ async function generateNewCaixaCode() {
   if (code) {
     codeField.value = code;
     updateEmbalagemBoxSummary();
-    atualizarSelectCaixasAbertas();
-    showToast(`Nova caixa ${code} iniciada! A caixa anterior permanece salva com seu conteúdo.`);
+    showToast(`Nova caixa ${code} iniciada!`);
     playSuccessBeep();
   }
 }
@@ -2320,8 +2271,6 @@ function updateEmbalagemBoxSummary() {
   } else {
     unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>';
   }
-
-  atualizarSelectCaixasAbertas();
 }
 
 function abrirModalConteudoCaixa() {

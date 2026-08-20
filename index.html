@@ -1052,7 +1052,7 @@
                 <form id="form-embalagem" onsubmit="processEmbalarUnidade(event)">
                   <div class="grid-2col">
                     <div class="form-group">
-                      <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Código da Caixa Ativa</label>
+                      <label for="emb-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
                       <div class="flex-row">
                         <input type="text" id="emb-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
                         <button type="button" class="btn btn-secondary" onclick="generateNewCaixaCode()" style="margin-top: 15px;" title="Iniciar uma nova caixa sequencial">
@@ -1062,25 +1062,16 @@
                     </div>
 
                     <div class="form-group">
-                      <label for="emb-caixas-abertas-select"><i class="fa-solid fa-folder-open"></i> Alternar Caixa Aberta (<span id="count-caixas-abertas">0</span>)</label>
-                      <select id="emb-caixas-abertas-select" onchange="alternarCaixaAtiva(this.value)">
-                        <option value="">-- Nenhuma outra caixa aberta --</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div class="grid-2col">
-                    <div class="form-group">
-                      <label for="emb-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade Aprovada *</label>
-                      <input type="text" id="emb-serial" placeholder="Bipe o SERIAL da unidade testada..." required>
-                    </div>
-
-                    <div class="form-group">
                       <label for="emb-printer-select"><i class="fa-solid fa-print"></i> Impressora Zebra (IP/Posto)</label>
                       <select id="emb-printer-select" onchange="saveSelectedPrinterPreference('embalagem')">
                         <option value="">Nenhuma impressora selecionada</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="emb-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade Aprovada *</label>
+                    <input type="text" id="emb-serial" placeholder="Bipe o SERIAL da unidade testada..." required>
                   </div>
 
                   <button type="submit" class="btn btn-success btn-block">
