@@ -65,6 +65,7 @@ async function initDbConnection() {
     await pool.query(schemaSql);
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS sucata JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS reparo_eletronico JSONB');
+    await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS historico JSONB DEFAULT \'[]\'::jsonb');
     await pool.query('ALTER TABLE printers ADD COLUMN IF NOT EXISTS dpi INTEGER DEFAULT 300');
     
     // Create sequence generators table for atomic sequences (concurrent safety)
@@ -342,7 +343,8 @@ app.get('/api/units', async (req, res) => {
       embalagem: row.embalagem,
       expedicao: row.expedicao,
       sucata: row.sucata,
-      reparo_eletronico: row.reparo_eletronico
+      reparo_eletronico: row.reparo_eletronico,
+      historico: row.historico || []
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -350,7 +352,7 @@ app.get('/api/units', async (req, res) => {
 });
 
 app.post('/api/units', async (req, res) => {
-  const { id, fabricante, modelo, serial, gpon, mac, localidade, operador, dataRecebimento, status } = req.body;
+  const { id, fabricante, modelo, serial, gpon, mac, localidade, operador, dataRecebimento, status, historico } = req.body;
   try {
     const cleanSerial = (serial || '').trim();
     const cleanGpon = (gpon || '').trim();
@@ -384,10 +386,22 @@ app.post('/api/units', async (req, res) => {
       }
     }
 
+    const initialHistory = (historico && Array.isArray(historico) && historico.length > 0)
+      ? historico
+      : [{
+          id: 'HIST_' + Date.now() + '_rec',
+          tipo: 'RECEBIMENTO',
+          titulo: 'Recebimento de Unidade',
+          descricao: `Unidade recebida na localidade [${localidade}] pelo operador [${operador}]`,
+          data: dataRecebimento,
+          operador: operador,
+          statusNovo: status
+        }];
+
     await pool.query(
-      `INSERT INTO units (id, fabricante, modelo, serial, gpon, mac, localidade, operador, data_recebimento, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-      [id, fabricante, modelo, serial, gpon, mac, localidade, operador, dataRecebimento, status]
+      `INSERT INTO units (id, fabricante, modelo, serial, gpon, mac, localidade, operador, data_recebimento, status, historico)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id, fabricante, modelo, serial, gpon, mac, localidade, operador, dataRecebimento, status, JSON.stringify(initialHistory)]
     );
     res.status(201).json({ success: true, message: 'Unidade recebida!' });
   } catch (err) {
@@ -397,7 +411,7 @@ app.post('/api/units', async (req, res) => {
 
 app.put('/api/units/:id', async (req, res) => {
   const { id } = req.params;
-  const { status, cosmetico, funcional, embalagem, expedicao, sucata, reparo_eletronico } = req.body;
+  const { status, cosmetico, funcional, embalagem, expedicao, sucata, reparo_eletronico, historico } = req.body;
   try {
     await pool.query(
       `UPDATE units SET 
@@ -407,8 +421,9 @@ app.put('/api/units/:id', async (req, res) => {
         embalagem = COALESCE($4, embalagem),
         expedicao = COALESCE($5, expedicao),
         sucata = COALESCE($6, sucata),
-        reparo_eletronico = COALESCE($7, reparo_eletronico)
-       WHERE id = $8`,
+        reparo_eletronico = COALESCE($7, reparo_eletronico),
+        historico = COALESCE($8, historico)
+       WHERE id = $9`,
       [
         status, 
         cosmetico ? JSON.stringify(cosmetico) : null, 
@@ -417,6 +432,7 @@ app.put('/api/units/:id', async (req, res) => {
         expedicao ? JSON.stringify(expedicao) : null, 
         sucata ? JSON.stringify(sucata) : null,
         reparo_eletronico ? JSON.stringify(reparo_eletronico) : null,
+        historico ? JSON.stringify(historico) : null,
         id
       ]
     );

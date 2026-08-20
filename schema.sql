@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS units (
   embalagem JSONB,
   expedicao JSONB,
   sucata JSONB,
-  reparo_eletronico JSONB
+  reparo_eletronico JSONB,
+  historico JSONB DEFAULT '[]'::jsonb
 );
 
 -- 5. Defect Codes Table

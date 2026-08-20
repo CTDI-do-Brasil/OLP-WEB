@@ -846,6 +846,12 @@ textarea:focus {
   border: 3px solid var(--bg-surface);
 }
 
+.timeline-item.success .timeline-dot { background: var(--success); }
+.timeline-item.danger .timeline-dot { background: var(--danger); }
+.timeline-item.warning .timeline-dot { background: #f59e0b; }
+.timeline-item.info .timeline-dot { background: #3b82f6; }
+.timeline-item.purple .timeline-dot { background: #8b5cf6; }
+
 .timeline-content {
   background: var(--bg-glass-input);
   border: 1px solid var(--border-color);

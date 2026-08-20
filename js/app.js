@@ -184,7 +184,14 @@ function getSeedUnits() {
       cosmetico: { resultado: 'APROVADO', defeitos: [], obs: 'Perfeito estado', data: `${today} 10:00:00`, operador: 'RODRIGO.BARRETO' },
       funcional: { resultado: 'APROVADO', testes: ['POWER', 'WIFI', 'LAN', 'PON'], obs: 'Sem falhas', data: `${today} 10:15:00`, operador: 'RODRIGO.BARRETO' },
       embalagem: { caixaId: 'CX-2026-001', data: `${today} 11:00:00`, operador: 'RODRIGO.BARRETO' },
-      expedicao: { ordem: 'ORD-5541', destino: 'CD SÃO PAULO', data: `${today} 11:45:00`, operador: 'RODRIGO.BARRETO' }
+      expedicao: { ordem: 'ORD-5541', destino: 'CD SÃO PAULO', data: `${today} 11:45:00`, operador: 'RODRIGO.BARRETO' },
+      historico: [
+        { id: 'H1', tipo: 'RECEBIMENTO', titulo: 'Recebimento de Unidade', descricao: 'Recebido na DOCA 01', data: `${today} 09:30:00`, operador: 'RODRIGO.BARRETO', statusNovo: 'RECEBIDO' },
+        { id: 'H2', tipo: 'COSMETICO', titulo: 'Apontamento Cosmético: APROVADO', descricao: 'Perfeito estado', data: `${today} 10:00:00`, operador: 'RODRIGO.BARRETO', statusNovo: 'COSMETICO_OK' },
+        { id: 'H3', tipo: 'FUNCIONAL', titulo: 'Teste Funcional: APROVADO', descricao: 'Sem falhas (POWER, WIFI, LAN, PON)', data: `${today} 10:15:00`, operador: 'RODRIGO.BARRETO', statusNovo: 'FUNCIONAL_OK' },
+        { id: 'H4', tipo: 'EMBALAGEM', titulo: 'Embalado na Caixa [CX-2026-001]', descricao: 'Unidade vinculada na caixa CX-2026-001', data: `${today} 11:00:00`, operador: 'RODRIGO.BARRETO', statusNovo: 'EMBALADO' },
+        { id: 'H5', tipo: 'EXPEDICAO', titulo: 'Expedido na Ordem [ORD-5541]', descricao: 'Despachado para CD SÃO PAULO', data: `${today} 11:45:00`, operador: 'RODRIGO.BARRETO', statusNovo: 'EXPEDIDO' }
+      ]
     },
     {
       id: 'UNI_1002',
@@ -200,9 +207,143 @@ function getSeedUnits() {
       cosmetico: { resultado: 'APROVADO', defeitos: [], obs: '', data: `${today} 10:40:00`, operador: 'JOAO.SILVA' },
       funcional: { resultado: 'APROVADO', testes: ['POWER', 'WIFI'], obs: 'Aprovado em banca', data: `${today} 11:10:00`, operador: 'JOAO.SILVA' },
       embalagem: null,
-      expedicao: null
+      expedicao: null,
+      historico: [
+        { id: 'H6', tipo: 'RECEBIMENTO', titulo: 'Recebimento de Unidade', descricao: 'Recebido na PRATELEIRA A1', data: `${today} 10:15:00`, operador: 'JOAO.SILVA', statusNovo: 'RECEBIDO' },
+        { id: 'H7', tipo: 'COSMETICO', titulo: 'Apontamento Cosmético: APROVADO', descricao: 'Sem defeitos', data: `${today} 10:40:00`, operador: 'JOAO.SILVA', statusNovo: 'COSMETICO_OK' },
+        { id: 'H8', tipo: 'FUNCIONAL', titulo: 'Teste Funcional: APROVADO', descricao: 'Aprovado em banca (POWER, WIFI)', data: `${today} 11:10:00`, operador: 'JOAO.SILVA', statusNovo: 'FUNCIONAL_OK' }
+      ]
     }
   ];
+}
+
+/**
+ * Registra um novo evento detalhado no histórico da unidade
+ */
+function registrarEventoHistorico(unit, { tipo, titulo, descricao, operador, data, statusAnterior, statusNovo, extra }) {
+  if (!unit) return;
+  if (!unit.historico || !Array.isArray(unit.historico)) {
+    unit.historico = [];
+  }
+
+  const now = new Date();
+  const dateStr = data || (now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8));
+  const user = operador || (appState.currentUser ? appState.currentUser.login : 'OPERADOR');
+
+  const novoEvento = {
+    id: 'HIST_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    tipo: tipo || 'INFO',
+    titulo: titulo || tipo,
+    descricao: descricao || '',
+    data: dateStr,
+    operador: user,
+    statusAnterior: statusAnterior || null,
+    statusNovo: statusNovo || null,
+    extra: extra || null
+  };
+
+  unit.historico.push(novoEvento);
+  return novoEvento;
+}
+
+/**
+ * Retorna a lista completa cronológica de eventos de histórico da unidade
+ */
+function obterHistoricoCompletoUnidade(u) {
+  if (!u) return [];
+
+  let eventos = [];
+  if (u.historico && Array.isArray(u.historico) && u.historico.length > 0) {
+    eventos = [...u.historico];
+  } else {
+    // Sintetiza eventos caso o histórico explícito não esteja presente (legado)
+    if (u.dataRecebimento) {
+      eventos.push({
+        id: 'LEG_REC',
+        tipo: 'RECEBIMENTO',
+        titulo: 'Recebimento de Unidade',
+        descricao: `Recebido na localidade [${u.localidade || '-'}] por [${u.operador || '-'}]`,
+        data: u.dataRecebimento,
+        operador: u.operador || 'SISTEMA',
+        statusNovo: 'RECEBIDO'
+      });
+    }
+    if (u.cosmetico) {
+      eventos.push({
+        id: 'LEG_COS',
+        tipo: 'COSMETICO',
+        titulo: `Apontamento Cosmético: ${u.cosmetico.resultado}`,
+        descricao: `Resultado: ${u.cosmetico.resultado}. Defeitos: ${[...(u.cosmetico.defeitos || []), u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || 'Nenhum'}. Obs: ${u.cosmetico.obs || 'Nenhuma'}`,
+        data: u.cosmetico.data,
+        operador: u.cosmetico.operador || 'SISTEMA',
+        statusNovo: u.cosmetico.resultado === 'APROVADO' ? 'COSMETICO_OK' : 'COSMETICO_NOK',
+        extra: u.cosmetico
+      });
+    }
+    if (u.funcional) {
+      eventos.push({
+        id: 'LEG_FUNC',
+        tipo: 'FUNCIONAL',
+        titulo: `Teste Funcional: ${u.funcional.resultado}`,
+        descricao: `Resultado: ${u.funcional.resultado}. Testes: ${(u.funcional.testes || []).join(', ') || 'OK'}. Obs: ${u.funcional.obs || 'Nenhuma'}`,
+        data: u.funcional.data,
+        operador: u.funcional.operador || 'SISTEMA',
+        statusNovo: u.funcional.resultado === 'APROVADO' ? 'FUNCIONAL_OK' : 'FUNCIONAL_NOK',
+        extra: u.funcional
+      });
+    }
+    if (u.reparo_eletronico) {
+      eventos.push({
+        id: 'LEG_REP',
+        tipo: 'REPARO_ELETRONICO',
+        titulo: 'Reparo Eletrônico',
+        descricao: `Defeito: ${u.reparo_eletronico.defeito || '-'} | Local: ${u.reparo_eletronico.local || '-'} | Serviço: ${u.reparo_eletronico.servico || '-'} | Técnico: ${u.reparo_eletronico.tecnico || '-'}`,
+        data: u.reparo_eletronico.data,
+        operador: u.reparo_eletronico.operador || 'SISTEMA',
+        statusNovo: 'REPARO_ELETRONICO',
+        extra: u.reparo_eletronico
+      });
+    }
+    if (u.embalagem) {
+      eventos.push({
+        id: 'LEG_EMB',
+        tipo: 'EMBALAGEM',
+        titulo: `Embalado na Caixa [${u.embalagem.caixaId}]`,
+        descricao: `Unidade embalada na caixa [${u.embalagem.caixaId}]`,
+        data: u.embalagem.data,
+        operador: u.embalagem.operador || 'SISTEMA',
+        statusNovo: 'EMBALADO',
+        extra: u.embalagem
+      });
+    }
+    if (u.expedicao) {
+      eventos.push({
+        id: 'LEG_EXP',
+        tipo: 'EXPEDICAO',
+        titulo: `Expedido na Ordem [${u.expedicao.ordem}]`,
+        descricao: `Despachado para destino [${u.expedicao.destino}]`,
+        data: u.expedicao.data,
+        operador: u.expedicao.operador || 'SISTEMA',
+        statusNovo: 'EXPEDIDO',
+        extra: u.expedicao
+      });
+    }
+    if (u.sucata) {
+      eventos.push({
+        id: 'LEG_SUC',
+        tipo: 'SUCATA',
+        titulo: 'Sucateado',
+        descricao: `Motivo: ${u.sucata.motivo}. Obs: ${u.sucata.obs || 'Nenhuma'}`,
+        data: u.sucata.data,
+        operador: u.sucata.operador || 'SISTEMA',
+        statusNovo: 'SUCATA',
+        extra: u.sucata
+      });
+    }
+  }
+
+  // Ordenar por data
+  return eventos.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
 }
 
 /* ==========================================================================
@@ -1708,7 +1849,18 @@ async function processRecebimentoSubmit(e) {
       cosmetico: null,
       funcional: null,
       embalagem: null,
-      expedicao: null
+      expedicao: null,
+      historico: [
+        {
+          id: 'HIST_' + Date.now() + '_rec',
+          tipo: 'RECEBIMENTO',
+          titulo: 'Recebimento de Unidade',
+          descricao: `Recebido na localidade [${localidade}] pelo operador [${appState.currentUser.login}]`,
+          data: dateStr,
+          operador: appState.currentUser.login,
+          statusNovo: 'RECEBIDO'
+        }
+      ]
     };
 
     const res = await fetch('/api/units', {
@@ -1905,13 +2057,25 @@ async function saveApontamentoCosmetico(e) {
   };
   const targetStatus = resVal === 'APROVADO' ? 'COSMETICO_OK' : 'COSMETICO_NOK';
 
+  registrarEventoHistorico(unit, {
+    tipo: 'COSMETICO',
+    titulo: `Apontamento Cosmético: ${resVal}`,
+    descricao: `Resultado: ${resVal}. Defeitos: ${[...defeitos, defeitoConstatado].filter(Boolean).join(', ') || 'Nenhum'}. Obs: ${obs || 'Nenhuma'}`,
+    operador: appState.currentUser.login,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: targetStatus,
+    extra: cosmeticoData
+  });
+
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: targetStatus,
-        cosmetico: cosmeticoData
+        cosmetico: cosmeticoData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -1975,13 +2139,25 @@ async function saveApontamentoFuncional(e) {
   };
   const targetStatus = resVal === 'APROVADO' ? 'FUNCIONAL_OK' : 'FUNCIONAL_NOK';
 
+  registrarEventoHistorico(unit, {
+    tipo: 'FUNCIONAL',
+    titulo: `Teste Funcional: ${resVal}`,
+    descricao: `Resultado: ${resVal}. Testes realizados: ${testes.join(', ') || 'Nenhum'}. Obs: ${obs || 'Nenhuma'}`,
+    operador: appState.currentUser.login,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: targetStatus,
+    extra: funcionalData
+  });
+
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: targetStatus,
-        funcional: funcionalData
+        funcional: funcionalData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -2043,13 +2219,25 @@ async function saveApontamentoSucata(e) {
   };
   const targetStatus = 'SUCATA';
 
+  registrarEventoHistorico(unit, {
+    tipo: 'SUCATA',
+    titulo: 'Apontamento de Sucata',
+    descricao: `Motivo: ${motivo}. Obs: ${obs || 'Nenhuma'}`,
+    operador: appState.currentUser.login,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: targetStatus,
+    extra: sucataData
+  });
+
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: targetStatus,
-        sucata: sucataData
+        sucata: sucataData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -2133,13 +2321,25 @@ async function saveApontamentoReparo(e) {
   };
   const targetStatus = 'REPARO_ELETRONICO';
 
+  registrarEventoHistorico(unit, {
+    tipo: 'REPARO_ELETRONICO',
+    titulo: 'Reparo Eletrônico Registrado',
+    descricao: `Defeito: ${defeito} | Local: ${local} | Causa: ${causa} | Serviço: ${servico} | Designator: ${designator} | Técnico: ${tecnico} | Reparadora: ${reparadora}`,
+    operador: appState.currentUser.login,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: targetStatus,
+    extra: reparoData
+  });
+
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: targetStatus,
-        reparo_eletronico: reparoData
+        reparo_eletronico: reparoData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -2609,16 +2809,29 @@ async function fecharCaixaEmbalagem(caixaId) {
 
   // Marca no estado local e backend que a caixa foi fechada
   caixasImpressasSet.add(caixaId);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
   for (const u of boxUnits) {
     if (u.embalagem) {
       u.embalagem.fechada = true;
+      registrarEventoHistorico(u, {
+        tipo: 'FECHAMENTO_CAIXA',
+        titulo: `Caixa [${caixaId}] Fechada`,
+        descricao: `Caixa [${caixaId}] finalizada com ${boxUnits.length} unidade(s) e etiqueta ZPL gerada.`,
+        operador: userAtual,
+        statusAnterior: u.status,
+        statusNovo: 'EMBALADO',
+        extra: { caixaId, totalUnidades: boxUnits.length }
+      });
+
       // Salva de forma não bloqueante no backend
       fetch(`/api/units/${u.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'EMBALADO',
-          embalagem: u.embalagem
+          embalagem: u.embalagem,
+          historico: u.historico
         })
       }).catch(err => console.error("Erro ao persistir fechamento da caixa:", err));
     }
@@ -2753,13 +2966,25 @@ async function processEmbalarUnidade(e) {
     operador: appState.currentUser ? appState.currentUser.login : 'OPERADOR'
   };
 
+  registrarEventoHistorico(unit, {
+    tipo: 'EMBALAGEM',
+    titulo: `Embalado na Caixa [${caixaId}]`,
+    descricao: `Unidade embalada na caixa [${caixaId}] pelo operador [${embalagemData.operador}]`,
+    operador: embalagemData.operador,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: 'EMBALADO',
+    extra: embalagemData
+  });
+
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: 'EMBALADO',
-        embalagem: embalagemData
+        embalagem: embalagemData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -2936,13 +3161,25 @@ async function processPalletUnidade(e) {
     operador: appState.currentUser.login
   };
 
+  registrarEventoHistorico(unit, {
+    tipo: 'EMBALAGEM',
+    titulo: `Embalado na Caixa Pallet [${caixaId}]`,
+    descricao: `Unidade embalada no Pallet / Caixa [${caixaId}] pelo operador [${appState.currentUser.login}]`,
+    operador: appState.currentUser.login,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: 'EMBALADO',
+    extra: embalagemData
+  });
+
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: 'EMBALADO',
-        embalagem: embalagemData
+        embalagem: embalagemData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -3200,8 +3437,19 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
   const embalagemData = {
     caixaId: currentAjusteCaixaId,
     data: dateStr,
-    operador: appState.currentUser.login
+    operador: appState.currentUser ? appState.currentUser.login : 'OPERADOR'
   };
+
+  registrarEventoHistorico(unit, {
+    tipo: 'EMBALAGEM',
+    titulo: `Adicionado na Caixa [${currentAjusteCaixaId}]`,
+    descricao: `Unidade vinculada e adicionada na caixa [${currentAjusteCaixaId}] pelo painel de ajustes`,
+    operador: embalagemData.operador,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: 'EMBALADO',
+    extra: embalagemData
+  });
 
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
@@ -3209,7 +3457,8 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: 'EMBALADO',
-        embalagem: embalagemData
+        embalagem: embalagemData,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -3237,11 +3486,27 @@ async function removerUnidadeDaCaixaAjuste(unitId, serial) {
   const unit = appState.units.find(u => u.id === unitId);
   if (!unit) return;
 
+  const caixaRemovidaId = currentAjusteCaixaId || (unit.embalagem ? unit.embalagem.caixaId : 'N/A');
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
   // Determinar status anterior
   let novoStatus = 'FUNCIONAL_OK';
   if (unit.funcional && unit.funcional.resultado === 'APROVADO') novoStatus = 'FUNCIONAL_OK';
   else if (unit.cosmetico && unit.cosmetico.resultado === 'APROVADO') novoStatus = 'COSMETICO_OK';
   else novoStatus = 'RECEBIDO';
+
+  registrarEventoHistorico(unit, {
+    tipo: 'REMOCAO_CAIXA',
+    titulo: `Removido da Caixa [${caixaRemovidaId}]`,
+    descricao: `Unidade desvinculada e removida da caixa [${caixaRemovidaId}] pelo operador [${userAtual}]. Status restaurado para [${novoStatus}].`,
+    operador: userAtual,
+    data: dateStr,
+    statusAnterior: 'EMBALADO',
+    statusNovo: novoStatus,
+    extra: { caixaId: caixaRemovidaId }
+  });
 
   try {
     const res = await fetch(`/api/units/${unit.id}`, {
@@ -3249,7 +3514,8 @@ async function removerUnidadeDaCaixaAjuste(unitId, serial) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: novoStatus,
-        embalagem: null
+        embalagem: null,
+        historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
@@ -3281,20 +3547,36 @@ async function excluirCaixaDireto(caixaId) {
     return;
   }
 
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
   try {
-    // Desvincular todas as unidades da caixa
+    // Desvincular todas as unidades da caixa e gravar histórico em cada uma
     for (const unit of boxUnits) {
       let novoStatus = 'FUNCIONAL_OK';
       if (unit.funcional && unit.funcional.resultado === 'APROVADO') novoStatus = 'FUNCIONAL_OK';
       else if (unit.cosmetico && unit.cosmetico.resultado === 'APROVADO') novoStatus = 'COSMETICO_OK';
       else novoStatus = 'RECEBIDO';
 
+      registrarEventoHistorico(unit, {
+        tipo: 'EXCLUSAO_CAIXA',
+        titulo: `Caixa [${caixaId}] Excluída / Cancelada`,
+        descricao: `A caixa inteira [${caixaId}] foi cancelada/excluída pelo operador [${userAtual}]. Unidade desvinculada e liberada com status [${novoStatus}].`,
+        operador: userAtual,
+        data: dateStr,
+        statusAnterior: 'EMBALADO',
+        statusNovo: novoStatus,
+        extra: { caixaId }
+      });
+
       await fetch(`/api/units/${unit.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: novoStatus,
-          embalagem: null
+          embalagem: null,
+          historico: unit.historico
         })
       });
 
@@ -3360,12 +3642,25 @@ async function processExpedicao(e) {
         data: dateStr,
         operador: appState.currentUser.login
       };
+
+      registrarEventoHistorico(u, {
+        tipo: 'EXPEDICAO',
+        titulo: `Expedido na Ordem [${ordem}]`,
+        descricao: `Unidade despachada para o destino [${destino}] através da ordem [${ordem}]`,
+        operador: appState.currentUser.login,
+        data: dateStr,
+        statusAnterior: u.status,
+        statusNovo: 'EXPEDIDO',
+        extra: expedicaoData
+      });
+
       return fetch(`/api/units/${u.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'EXPEDIDO',
-          expedicao: expedicaoData
+          expedicao: expedicaoData,
+          historico: u.historico
         })
       }).then(res => {
         if (!res.ok) throw new Error();
@@ -3425,105 +3720,78 @@ function openUnitTimelineModal(unitId) {
   const u = appState.units.find(item => item.id === unitId);
   if (!u) return;
 
+  const historico = obterHistoricoCompletoUnidade(u);
+
+  const getEventBadgeAndClass = (ev) => {
+    switch (ev.tipo) {
+      case 'RECEBIMENTO':
+        return { itemClass: 'info', badge: '<span class="badge badge-primary"><i class="fa-solid fa-dolly"></i> RECEBIMENTO</span>' };
+      case 'COSMETICO':
+        const cosOk = (ev.extra && ev.extra.resultado === 'APROVADO') || (ev.statusNovo === 'COSMETICO_OK') || (ev.titulo && ev.titulo.includes('APROVADO'));
+        return { 
+          itemClass: cosOk ? 'success' : 'danger', 
+          badge: `<span class="badge ${cosOk ? 'badge-success' : 'badge-danger'}"><i class="fa-solid fa-sparkles"></i> COSMÉTICO: ${cosOk ? 'APROVADO' : 'REPROVADO'}</span>` 
+        };
+      case 'FUNCIONAL':
+        const funcOk = (ev.extra && ev.extra.resultado === 'APROVADO') || (ev.statusNovo === 'FUNCIONAL_OK') || (ev.titulo && ev.titulo.includes('APROVADO'));
+        return { 
+          itemClass: funcOk ? 'success' : 'danger', 
+          badge: `<span class="badge ${funcOk ? 'badge-success' : 'badge-danger'}"><i class="fa-solid fa-plug-circle-check"></i> FUNCIONAL: ${funcOk ? 'APROVADO' : 'REPROVADO'}</span>` 
+        };
+      case 'REPARO_ELETRONICO':
+        return { itemClass: 'warning', badge: '<span class="badge badge-warning"><i class="fa-solid fa-screwdriver-wrench"></i> REPARO ELETRÔNICO</span>' };
+      case 'EMBALAGEM':
+        return { itemClass: 'success', badge: '<span class="badge badge-success"><i class="fa-solid fa-box-open"></i> EMBALAGEM / CAIXA</span>' };
+      case 'FECHAMENTO_CAIXA':
+        return { itemClass: 'info', badge: '<span class="badge badge-primary"><i class="fa-solid fa-lock"></i> FECHAMENTO DE CAIXA</span>' };
+      case 'REMOCAO_CAIXA':
+        return { itemClass: 'warning', badge: '<span class="badge badge-warning"><i class="fa-solid fa-box-archive"></i> REMOÇÃO DA CAIXA</span>' };
+      case 'EXCLUSAO_CAIXA':
+        return { itemClass: 'danger', badge: '<span class="badge badge-danger"><i class="fa-solid fa-trash-can"></i> CAIXA EXCLUÍDA / CANCELADA</span>' };
+      case 'EXPEDICAO':
+        return { itemClass: 'purple', badge: '<span class="badge" style="background: #8b5cf6; color: #fff;"><i class="fa-solid fa-truck-fast"></i> EXPEDIÇÃO</span>' };
+      case 'SUCATA':
+        return { itemClass: 'danger', badge: '<span class="badge badge-danger"><i class="fa-solid fa-ban"></i> SUCATEADO</span>' };
+      default:
+        return { itemClass: 'info', badge: `<span class="badge badge-primary">${ev.titulo || ev.tipo}</span>` };
+    }
+  };
+
   const modalBody = document.getElementById('unit-modal-body');
   modalBody.innerHTML = `
-    <div class="grid-2col margin-bottom">
-      <div><strong>Serial:</strong> <code>${u.serial}</code></div>
-      <div><strong>Modelo:</strong> ${u.fabricante} - ${u.modelo}</div>
-      <div><strong>GPON/MAC:</strong> <code>${u.gpon || u.mac || '-'}</code></div>
-      <div><strong>Localidade:</strong> ${u.localidade}</div>
+    <div class="grid-2col margin-bottom" style="background: rgba(15, 23, 42, 0.6); padding: 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);">
+      <div><strong>Serial:</strong> <code style="font-size: 1rem; color: #38bdf8;">${u.serial}</code></div>
+      <div><strong>Modelo:</strong> <span>${u.fabricante} - ${u.modelo}</span></div>
+      <div><strong>GPON / MAC:</strong> <code>${u.gpon || u.mac || '-'}</code></div>
+      <div><strong>Localidade Atual:</strong> <span>${u.localidade || '-'}</span></div>
+      <div><strong>Status Atual:</strong> <span class="badge ${getStatusBadgeClass(u.status)}">${u.status}</span></div>
+      <div><strong>Caixa Atual:</strong> <span>${u.embalagem ? `<strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${u.embalagem.caixaId}</strong>` : '<span class="text-muted">Nenhuma</span>'}</span></div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px;">
+      <h4 style="margin: 0; font-size: 1rem; color: #94a3b8;"><i class="fa-solid fa-list-check"></i> Histórico de Movimentações e Apontamentos (${historico.length} registros)</h4>
     </div>
     
     <div class="timeline">
-      <!-- 1. RECEBIMENTO -->
-      <div class="timeline-item">
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span><i class="fa-solid fa-dolly"></i> RECEBIMENTO</span>
-            <small class="text-muted">${u.dataRecebimento}</small>
+      ${historico.map(ev => {
+        const styleInfo = getEventBadgeAndClass(ev);
+        return `
+          <div class="timeline-item ${styleInfo.itemClass}">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <div class="timeline-header">
+                <div>${styleInfo.badge} <span style="margin-left: 8px; font-weight: 600;">${ev.titulo || ''}</span></div>
+                <small class="text-muted"><i class="fa-regular fa-clock"></i> ${ev.data || '-'}</small>
+              </div>
+              <div style="display: flex; gap: 15px; font-size: 0.8rem; color: #94a3b8; margin: 4px 0;">
+                <span><i class="fa-solid fa-user"></i> Operador: <strong style="color: #e2e8f0;">${ev.operador || 'SISTEMA'}</strong></span>
+                ${ev.statusNovo ? `<span><i class="fa-solid fa-tag"></i> Status: <strong style="color: #60a5fa;">${ev.statusNovo}</strong></span>` : ''}
+              </div>
+              <p class="small" style="margin-top: 6px; margin-bottom: 0; color: #cbd5e1; line-height: 1.4;">${ev.descricao || '-'}</p>
+            </div>
           </div>
-          <p class="small">Recebido na localidade <b>${u.localidade}</b> por <b>${u.operador}</b>.</p>
-        </div>
-      </div>
-
-      <!-- 2. COSMÉTICO -->
-      ${u.cosmetico ? `
-      <div class="timeline-item">
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span><i class="fa-solid fa-sparkles"></i> COSMÉTICO: ${u.cosmetico.resultado}</span>
-            <small class="text-muted">${u.cosmetico.data}</small>
-          </div>
-          <p class="small">Apontado por: <b>${u.cosmetico.operador}</b>. Defeitos: ${[...u.cosmetico.defeitos, u.cosmetico.defeitoConstatado].filter(Boolean).join(', ') || 'Nenhum'}</p>
-        </div>
-      </div>` : ''}
-
-      <!-- 3. FUNCIONAL -->
-      ${u.funcional ? `
-      <div class="timeline-item">
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span><i class="fa-solid fa-plug-circle-check"></i> FUNCIONAL: ${u.funcional.resultado}</span>
-            <small class="text-muted">${u.funcional.data}</small>
-          </div>
-          <p class="small">Testes: ${u.funcional.testes.join(', ')}. Operador: <b>${u.funcional.operador}</b>.</p>
-        </div>
-      </div>` : ''}
-
-      <!-- 4. EMBALAGEM -->
-      ${u.embalagem ? `
-      <div class="timeline-item">
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span><i class="fa-solid fa-box-open"></i> EMBALAGEM</span>
-            <small class="text-muted">${u.embalagem.data}</small>
-          </div>
-          <p class="small">Embalado na caixa <b>${u.embalagem.caixaId}</b> por <b>${u.embalagem.operador}</b>.</p>
-        </div>
-      </div>` : ''}
-
-      <!-- 5. EXPEDIÇÃO -->
-      ${u.expedicao ? `
-      <div class="timeline-item">
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span><i class="fa-solid fa-truck-fast"></i> EXPEDIÇÃO</span>
-            <small class="text-muted">${u.expedicao.data}</small>
-          </div>
-          <p class="small">Ordem <b>${u.expedicao.ordem}</b> enviada para <b>${u.expedicao.destino}</b> por <b>${u.expedicao.operador}</b>.</p>
-        </div>
-      </div>` : ''}
-
-      <!-- REPARO ELETRÔNICO -->
-      ${u.reparo_eletronico ? `
-      <div class="timeline-item timeline-warning">
-        <div class="timeline-dot bg-warning"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span class="text-warning"><i class="fa-solid fa-screwdriver-wrench"></i> REPARO ELETRÔNICO</span>
-            <small class="text-muted">${u.reparo_eletronico.data}</small>
-          </div>
-          <p class="small"><b>Defeito:</b> ${u.reparo_eletronico.defeito} | <b>Local:</b> ${u.reparo_eletronico.local} | <b>Causa:</b> ${u.reparo_eletronico.causa} | <b>Serviço:</b> ${u.reparo_eletronico.servico} | <b>Designator:</b> ${u.reparo_eletronico.designator} | <b>Técnico:</b> ${u.reparo_eletronico.tecnico} | <b>Reparadora:</b> ${u.reparo_eletronico.reparadora} (Operador: <b>${u.reparo_eletronico.operador}</b>)</p>
-        </div>
-      </div>` : ''}
-
-      <!-- SUCATA -->
-      ${u.sucata ? `
-      <div class="timeline-item timeline-danger">
-        <div class="timeline-dot bg-danger"></div>
-        <div class="timeline-content">
-          <div class="timeline-header">
-            <span class="text-danger"><i class="fa-solid fa-trash-can"></i> SUCATEADO</span>
-            <small class="text-muted">${u.sucata.data}</small>
-          </div>
-          <p class="small">Apontado como sucata por: <b>${u.sucata.operador}</b>. Motivo: <b>${u.sucata.motivo}</b>. Obs: ${u.sucata.obs || 'Nenhuma'}</p>
-        </div>
-      </div>` : ''}
+        `;
+      }).join('')}
     </div>
   `;
 
