@@ -2682,7 +2682,7 @@ function validarRegrasObrigatoriasEmbalagem(unit) {
   if (pendencias.length > 0) {
     return {
       valido: false,
-      mensagem: `BLOQUEIO DE EMBALAGEM:\nA unidade [${unit.serial || 'S/N'}] só pode ser embalada se todos os requisitos forem atendidos:\n\n1. Recebimento - Realizado\n2. Teste Funcional - Aprovado\n3. Cosmético - Aprovado\n\nPendência(s) encontrada(s):\n• ${pendencias.join('\n• ')}`
+      mensagem: `BLOQUEIO DE EMBALAGEM:\nA unidade [${unit.serial || 'S/N'}] possui pendências para ser embalada:\n\nPendência(s) encontrada(s):\n• ${pendencias.join('\n• ')}`
     };
   }
 
