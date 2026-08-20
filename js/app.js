@@ -2644,6 +2644,51 @@ async function fecharCaixaEmbalagem(caixaId) {
   showToast(`Caixa ${caixaId} fechada e etiqueta única impressa! Nova caixa iniciada.`);
 }
 
+/**
+ * Validação de Regras Obrigatórias para Embalagem:
+ * 1. Recebimento - Realizado
+ * 2. Teste Funcional - Aprovado
+ * 3. Cosmético - Aprovado
+ */
+function validarRegrasObrigatoriasEmbalagem(unit) {
+  if (!unit) {
+    return { 
+      valido: false, 
+      mensagem: "BLOQUEIO DE EMBALAGEM:\nUnidade não encontrada no recebimento!\n\nRegra: A unidade precisa estar com o Recebimento Realizado no sistema." 
+    };
+  }
+
+  const pendencias = [];
+
+  // Regra 1: Recebimento - Realizado
+  if (!unit.dataRecebimento && !unit.serial) {
+    pendencias.push("Recebimento: PENDENTE / NÃO REALIZADO");
+  }
+
+  // Regra 2: Teste Funcional - Aprovado
+  if (!unit.funcional) {
+    pendencias.push("Teste Funcional: NÃO REALIZADO (Obrigatório APROVADO)");
+  } else if (unit.funcional.resultado !== 'APROVADO') {
+    pendencias.push(`Teste Funcional: NÃO APROVADO (Resultado atual: ${unit.funcional.resultado})`);
+  }
+
+  // Regra 3: Cosmético - Aprovado
+  if (!unit.cosmetico) {
+    pendencias.push("Apontamento Cosmético: NÃO REALIZADO (Obrigatório APROVADO)");
+  } else if (unit.cosmetico.resultado !== 'APROVADO') {
+    pendencias.push(`Apontamento Cosmético: NÃO APROVADO (Resultado atual: ${unit.cosmetico.resultado})`);
+  }
+
+  if (pendencias.length > 0) {
+    return {
+      valido: false,
+      mensagem: `BLOQUEIO DE EMBALAGEM:\nA unidade [${unit.serial || 'S/N'}] só pode ser embalada se todos os requisitos forem atendidos:\n\n1. Recebimento - Realizado\n2. Teste Funcional - Aprovado\n3. Cosmético - Aprovado\n\nPendência(s) encontrada(s):\n• ${pendencias.join('\n• ')}`
+    };
+  }
+
+  return { valido: true };
+}
+
 async function processEmbalarUnidade(e) {
   e.preventDefault();
   const caixaId = document.getElementById('emb-caixa-id').value.trim().toUpperCase();
@@ -2651,9 +2696,11 @@ async function processEmbalarUnidade(e) {
 
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
 
-  if (!unit) {
+  // Validação rígida das regras obrigatórias de embalagem
+  const validacao = validarRegrasObrigatoriasEmbalagem(unit);
+  if (!validacao.valido) {
     playErrorBeep();
-    alert("Erro: Unidade não encontrada no recebimento! A unidade precisa estar recebida no sistema.");
+    alert(validacao.mensagem);
     return;
   }
 
@@ -2844,39 +2891,24 @@ async function processPalletUnidade(e) {
 
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
 
-  if (!unit) {
-    alert("Erro: Registro de recebimento não executado! A unidade precisa estar recebida no sistema.");
+  // Validação rígida das regras obrigatórias de embalagem
+  const validacao = validarRegrasObrigatoriasEmbalagem(unit);
+  if (!validacao.valido) {
+    playErrorBeep();
+    alert(validacao.mensagem);
     return;
   }
 
-  // 1. Check all required steps
-  // Required:
-  // - Registro de recebimento (implicitly checked as unit exists)
-  // - Teste funcional ou reparo finalizado.
-  // - Apontamento cosmético.
-  // We need to show which steps are missing if any.
-  const missingSteps = [];
-  
-  // Teste funcional ou reparo
-  const hasFuncional = !!unit.funcional;
-  const hasReparo = !!unit.reparo_eletronico;
-  if (!hasFuncional && !hasReparo) {
-    missingSteps.push("Teste Funcional ou Reparo Eletrônico");
-  }
-
-  // Apontamento cosmético
-  const hasCosmetico = !!unit.cosmetico;
-  if (!hasCosmetico) {
-    missingSteps.push("Apontamento Cosmético");
-  }
-
-  if (missingSteps.length > 0) {
-    alert(`Não é possível realizar a embalagem. Etapa(s) faltante(s): \n- ${missingSteps.join('\n- ')}`);
+  // Check if unit is already packed
+  if (unit.embalagem) {
+    playErrorBeep();
+    alert(`Esta unidade já foi embalada na caixa: ${unit.embalagem.caixaId}!`);
     return;
   }
 
   // Check if unit is rejected
-  if (unit.status.includes('NOK')) {
+  if (unit.status && unit.status.includes('NOK')) {
+    playErrorBeep();
     alert("Unidade com apontamento REPROVADO não pode ser embalada!");
     return;
   }
@@ -3115,9 +3147,11 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
 
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
 
-  if (!unit) {
+  // Validação rígida das regras obrigatórias de embalagem
+  const validacao = validarRegrasObrigatoriasEmbalagem(unit);
+  if (!validacao.valido) {
     playErrorBeep();
-    alert("Erro: Unidade não encontrada no recebimento!");
+    alert(validacao.mensagem);
     return;
   }
 
