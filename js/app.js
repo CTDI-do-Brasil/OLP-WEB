@@ -2192,12 +2192,62 @@ async function generateNextCaixaCodeFromServer() {
 async function initEmbalagemView() {
   const codeField = document.getElementById('emb-caixa-id');
   if (codeField) {
-    codeField.placeholder = "Carregando...";
-    const code = await fetchCurrentCaixaCodeFromServer();
-    codeField.value = code;
+    if (!codeField.value) {
+      codeField.placeholder = "Carregando...";
+      const code = await fetchCurrentCaixaCodeFromServer();
+      codeField.value = code;
+    }
     updateEmbalagemBoxSummary();
   }
+  atualizarSelectCaixasAbertas();
   populatePrinterDropdowns();
+}
+
+function atualizarSelectCaixasAbertas() {
+  const selectEl = document.getElementById('emb-caixas-abertas-select');
+  const countEl = document.getElementById('count-caixas-abertas');
+  if (!selectEl) return;
+
+  const currentCaixaId = (document.getElementById('emb-caixa-id')?.value || '').trim().toUpperCase();
+
+  // Agrupar todas as caixas com unidades embaladas
+  const caixasMap = {};
+  appState.units.forEach(u => {
+    if (u.embalagem && u.embalagem.caixaId) {
+      const cId = u.embalagem.caixaId;
+      if (!caixasMap[cId]) {
+        caixasMap[cId] = {
+          caixaId: cId,
+          modelo: u.modelo || '-',
+          localidade: u.localidade || '-',
+          count: 0
+        };
+      }
+      caixasMap[cId].count++;
+    }
+  });
+
+  const caixas = Object.values(caixasMap).sort((a, b) => b.caixaId.localeCompare(a.caixaId));
+  if (countEl) {
+    countEl.innerText = caixas.length;
+  }
+
+  selectEl.innerHTML = '<option value="">-- Selecionar / Alternar para outra Caixa Aberta --</option>';
+  caixas.forEach(c => {
+    const isSelected = (c.caixaId === currentCaixaId) ? 'selected' : '';
+    selectEl.innerHTML += `<option value="${c.caixaId}" ${isSelected}>Caixa ${c.caixaId} - ${c.modelo} (${c.count}/10 un) - ${c.localidade}</option>`;
+  });
+}
+
+function alternarCaixaAtiva(caixaId) {
+  if (!caixaId) return;
+  const codeField = document.getElementById('emb-caixa-id');
+  if (!codeField) return;
+
+  codeField.value = caixaId;
+  updateEmbalagemBoxSummary();
+  showToast(`Caixa ativa alterada para: ${caixaId}`);
+  playSuccessBeep();
 }
 
 async function generateNewCaixaCode() {
@@ -2207,10 +2257,9 @@ async function generateNewCaixaCode() {
   const currentCaixaId = codeField.value.trim().toUpperCase();
   const currentBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentCaixaId);
 
-  // BLOQUEIO: Não permitir gerar nova caixa se a atual estiver sem nenhuma unidade registrada
+  // Se a caixa atual já tiver 0 unidades, avisa que já é uma caixa vazia nova pronta para uso
   if (currentCaixaId && currentBoxUnits.length === 0) {
-    playErrorBeep();
-    alert(`A caixa atual [${currentCaixaId}] não possui nenhuma unidade registrada!\n\nVocê só pode gerar uma nova caixa após registrar pelo menos 1 unidade ou fechar a caixa atual.`);
+    showToast(`A caixa ${currentCaixaId} já é uma caixa nova sem unidades associadas.`);
     return;
   }
 
@@ -2219,7 +2268,9 @@ async function generateNewCaixaCode() {
   if (code) {
     codeField.value = code;
     updateEmbalagemBoxSummary();
-    showToast(`Nova caixa sequencial ${code} iniciada no servidor!`);
+    atualizarSelectCaixasAbertas();
+    showToast(`Nova caixa ${code} iniciada! A caixa anterior permanece salva com seu conteúdo.`);
+    playSuccessBeep();
   }
 }
 
@@ -2269,6 +2320,46 @@ function updateEmbalagemBoxSummary() {
   } else {
     unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>';
   }
+
+  atualizarSelectCaixasAbertas();
+}
+
+function abrirModalConteudoCaixa() {
+  const codeField = document.getElementById('emb-caixa-id');
+  if (!codeField) return;
+  const caixaId = codeField.value.trim().toUpperCase();
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  document.getElementById('modal-conteudo-caixa-id').innerText = caixaId;
+  document.getElementById('modal-conteudo-modelo').innerText = boxUnits.length > 0 ? boxUnits[0].modelo : '-';
+  document.getElementById('modal-conteudo-localidade').innerText = boxUnits.length > 0 ? (boxUnits[0].localidade || '-') : '-';
+  document.getElementById('modal-conteudo-total').innerText = `${boxUnits.length} / 10 Unidades`;
+
+  const tbody = document.getElementById('tbody-modal-conteudo-unidades');
+  if (boxUnits.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding: 20px;">Nenhuma unidade bipada nesta caixa ainda.</td></tr>';
+  } else {
+    tbody.innerHTML = boxUnits.map((u, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td><strong>${u.serial}</strong></td>
+        <td>${u.gpon || '-'}</td>
+        <td>${u.mac || '-'}</td>
+        <td>${u.modelo}</td>
+        <td>${u.localidade || '-'}</td>
+        <td>${u.embalagem.data || '-'}</td>
+        <td>${u.embalagem.operador || '-'}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('modal-conteudo-caixa').classList.remove('hidden');
+}
+
+function fecharModalConteudoCaixa() {
+  const modal = document.getElementById('modal-conteudo-caixa');
+  if (modal) modal.classList.add('hidden');
 }
 
 function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
