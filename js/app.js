@@ -358,6 +358,7 @@ function navigate(viewId) {
   if (viewId === 'consulta') filterConsulta();
   if (viewId === 'embalagem') initEmbalagemView();
   if (viewId === 'embalagem-pallet') initPalletView();
+  if (viewId === 'embalagem-consulta') initEmbalagemConsultaView();
 }
 
 function updatePageTitle(viewId) {
@@ -372,6 +373,7 @@ function updatePageTitle(viewId) {
     'apontamento-funcional': { title: 'Apontamento Funcional', sub: 'Testes de conectividade e hardware' },
     'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas in caixas' },
     'embalagem-pallet': { title: 'Processo de Embalagem - Pallet', sub: 'Embalagem rígida por lote com validação de modelo, localidade e etapas' },
+    'embalagem-consulta': { title: 'Consulta & Ajustes de Caixas', sub: 'Visualização, inclusão/remoção de unidades e cancelamento/exclusão de caixas' },
     'expedicao': { title: 'Módulo de Expedição', sub: 'Despacho e expedição de caixas e unidades' },
     'sucata': { title: 'Módulo de Sucata', sub: 'Registro e descarte de equipamentos avariados (sucateamento)' },
     'reparo-eletronico': { title: 'Reparo Eletrônico', sub: 'Apontamento de reparo em placas e componentes' },
@@ -2830,6 +2832,358 @@ async function processPalletUnidade(e) {
     console.error(err);
     alert("Erro ao salvar embalagem no servidor!");
   }
+}
+
+/* ==========================================================================
+   MENU EMBALAGEM - CONSULTA & AJUSTES DE CAIXAS
+   ========================================================================== */
+
+let currentAjusteCaixaId = null;
+
+function initEmbalagemConsultaView() {
+  carregarListaTodasCaixas();
+  if (currentAjusteCaixaId) {
+    exibirDetalhesCaixaParaAjuste(currentAjusteCaixaId);
+  }
+}
+
+function carregarListaTodasCaixas() {
+  const selectElement = document.getElementById('ajuste-caixas-select');
+  const tbody = document.getElementById('tbody-todas-caixas');
+  if (!selectElement || !tbody) return;
+
+  // Agrupar unidades por caixaId
+  const caixasMap = {};
+  appState.units.forEach(u => {
+    if (u.embalagem && u.embalagem.caixaId) {
+      const cId = u.embalagem.caixaId;
+      if (!caixasMap[cId]) {
+        caixasMap[cId] = {
+          caixaId: cId,
+          modelo: u.modelo || '-',
+          localidade: u.localidade || '-',
+          data: u.embalagem.data || '-',
+          operador: u.embalagem.operador || '-',
+          unidades: []
+        };
+      }
+      caixasMap[cId].unidades.push(u);
+    }
+  });
+
+  const caixas = Object.values(caixasMap).sort((a, b) => b.caixaId.localeCompare(a.caixaId));
+
+  // Preencher Select
+  selectElement.innerHTML = '<option value="">-- Selecione uma Caixa --</option>';
+  caixas.forEach(c => {
+    selectElement.innerHTML += `<option value="${c.caixaId}">${c.caixaId} - ${c.modelo} (${c.unidades.length} un) - ${c.localidade}</option>`;
+  });
+
+  // Preencher Tabela
+  if (caixas.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding: 20px;">Nenhuma caixa embalada encontrada no sistema.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = caixas.map(c => `
+    <tr>
+      <td><strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
+      <td>${c.modelo}</td>
+      <td>${c.localidade}</td>
+      <td><span class="badge ${c.unidades.length >= 10 ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / 10</span></td>
+      <td>${c.data}</td>
+      <td style="text-align: center;">
+        <button type="button" class="btn btn-primary btn-sm" onclick="selecionarCaixaRapida('${c.caixaId}')" title="Consultar e Ajustar Caixa">
+          <i class="fa-solid fa-pen-to-square"></i> Ajustar
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="reimprimirEtiquetaPorCaixaId('${c.caixaId}')" title="Reimprimir Etiqueta ZPL" style="margin-left: 5px;">
+          <i class="fa-solid fa-print"></i>
+        </button>
+        <button type="button" class="btn btn-danger btn-sm" onclick="excluirCaixaDireto('${c.caixaId}')" title="Excluir Caixa" style="margin-left: 5px;">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function buscarCaixaParaAjuste() {
+  const query = document.getElementById('ajuste-caixa-search').value.trim().toUpperCase();
+  if (!query) {
+    alert("Informe o código da caixa ou o serial/GPON/MAC da unidade para buscar!");
+    return;
+  }
+
+  // 1. Procurar por código direto da caixa
+  let caixaFound = null;
+  const unitWithCaixa = appState.units.find(u => u.embalagem && u.embalagem.caixaId === query);
+  if (unitWithCaixa) {
+    caixaFound = unitWithCaixa.embalagem.caixaId;
+  } else {
+    // 2. Procurar por serial, gpon ou mac da unidade
+    const unitMatch = appState.units.find(u => u.serial === query || u.gpon === query || u.mac === query);
+    if (unitMatch && unitMatch.embalagem && unitMatch.embalagem.caixaId) {
+      caixaFound = unitMatch.embalagem.caixaId;
+    }
+  }
+
+  if (!caixaFound) {
+    playErrorBeep();
+    alert(`Nenhuma caixa encontrada para a busca: "${query}". Verifique se o código está correto ou se a unidade já foi embalada.`);
+    return;
+  }
+
+  playSuccessBeep();
+  document.getElementById('ajuste-caixas-select').value = caixaFound;
+  exibirDetalhesCaixaParaAjuste(caixaFound);
+}
+
+function selecionarCaixaRapida(caixaId) {
+  if (!caixaId) {
+    document.getElementById('painel-ajuste-caixa').classList.add('hidden');
+    currentAjusteCaixaId = null;
+    return;
+  }
+  document.getElementById('ajuste-caixa-search').value = caixaId;
+  exibirDetalhesCaixaParaAjuste(caixaId);
+}
+
+function exibirDetalhesCaixaParaAjuste(caixaId) {
+  currentAjusteCaixaId = caixaId;
+  const painel = document.getElementById('painel-ajuste-caixa');
+  if (!painel) return;
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  if (boxUnits.length === 0) {
+    painel.classList.add('hidden');
+    carregarListaTodasCaixas();
+    return;
+  }
+
+  painel.classList.remove('hidden');
+  const modelo = boxUnits[0].modelo || '-';
+  const localidade = boxUnits[0].localidade || '-';
+
+  document.getElementById('ajuste-detalhe-caixa-id').innerHTML = `<i class="fa-solid fa-box"></i> Caixa: ${caixaId}`;
+  document.getElementById('ajuste-detalhe-modelo').innerText = modelo;
+  document.getElementById('ajuste-detalhe-localidade').innerText = localidade;
+  document.getElementById('ajuste-detalhe-total').innerText = `${boxUnits.length} / 10 Unidades`;
+
+  const tbody = document.getElementById('tbody-ajuste-unidades-caixa');
+  tbody.innerHTML = boxUnits.map((u, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td><strong>${u.serial}</strong></td>
+      <td>${u.gpon || '-'}</td>
+      <td>${u.mac || '-'}</td>
+      <td>${u.modelo}</td>
+      <td>${u.localidade}</td>
+      <td>${u.embalagem.data || '-'}</td>
+      <td>${u.embalagem.operador || '-'}</td>
+      <td style="text-align: center;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removerUnidadeDaCaixaAjuste('${u.id}', '${u.serial}')" title="Remover unidade desta caixa">
+          <i class="fa-solid fa-user-minus"></i> Remover da Caixa
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  // Rola suavemente até o painel
+  painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function adicionarUnidadeNaCaixaAjuste(e) {
+  e.preventDefault();
+  if (!currentAjusteCaixaId) {
+    alert("Nenhuma caixa selecionada para ajuste!");
+    return;
+  }
+
+  const serialInput = document.getElementById('ajuste-add-serial');
+  const serial = serialInput.value.trim().toUpperCase();
+
+  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+
+  if (!unit) {
+    playErrorBeep();
+    alert("Erro: Unidade não encontrada no recebimento!");
+    return;
+  }
+
+  if (unit.embalagem) {
+    playErrorBeep();
+    alert(`Esta unidade já está embalada na caixa [${unit.embalagem.caixaId}]. Remova-a de lá primeiro se desejar trocá-la de caixa.`);
+    return;
+  }
+
+  if (unit.status && unit.status.includes('NOK')) {
+    playErrorBeep();
+    alert("Unidade com apontamento REPROVADO não pode ser adicionada na caixa!");
+    return;
+  }
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentAjusteCaixaId);
+
+  // Validação de capacidade
+  if (boxUnits.length >= 10) {
+    playErrorBeep();
+    alert(`A caixa [${currentAjusteCaixaId}] já possui a capacidade máxima de 10 unidades!`);
+    return;
+  }
+
+  // Validação de modelo e regional
+  if (boxUnits.length > 0) {
+    const refModelo = boxUnits[0].modelo;
+    const refLoc = boxUnits[0].localidade;
+
+    if (unit.modelo !== refModelo) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE MODELO:\nA caixa aceita apenas o modelo [${refModelo}]. A unidade informada é [${unit.modelo}].`);
+      return;
+    }
+
+    if (unit.localidade !== refLoc) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE REGIONAL:\nA caixa aceita apenas a regional [${refLoc}]. A unidade informada é [${unit.localidade}].`);
+      return;
+    }
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  const embalagemData = {
+    caixaId: currentAjusteCaixaId,
+    data: dateStr,
+    operador: appState.currentUser.login
+  };
+
+  try {
+    const res = await fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'EMBALADO',
+        embalagem: embalagemData
+      })
+    });
+    if (!res.ok) throw new Error("Erro de resposta");
+
+    unit.embalagem = embalagemData;
+    unit.status = 'EMBALADO';
+
+    serialInput.value = '';
+    playSuccessBeep();
+    showToast(`Unidade ${unit.serial} adicionada à caixa ${currentAjusteCaixaId} com sucesso!`);
+
+    exibirDetalhesCaixaParaAjuste(currentAjusteCaixaId);
+    carregarListaTodasCaixas();
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao adicionar unidade na caixa no servidor!");
+  }
+}
+
+async function removerUnidadeDaCaixaAjuste(unitId, serial) {
+  if (!confirm(`Deseja realmente remover a unidade [${serial}] da caixa [${currentAjusteCaixaId}]?\n\nA unidade voltará para o status anterior e ficará livre para nova embalagem.`)) {
+    return;
+  }
+
+  const unit = appState.units.find(u => u.id === unitId);
+  if (!unit) return;
+
+  // Determinar status anterior
+  let novoStatus = 'FUNCIONAL_OK';
+  if (unit.funcional && unit.funcional.resultado === 'APROVADO') novoStatus = 'FUNCIONAL_OK';
+  else if (unit.cosmetico && unit.cosmetico.resultado === 'APROVADO') novoStatus = 'COSMETICO_OK';
+  else novoStatus = 'RECEBIDO';
+
+  try {
+    const res = await fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: novoStatus,
+        embalagem: null
+      })
+    });
+    if (!res.ok) throw new Error("Erro de resposta");
+
+    unit.embalagem = null;
+    unit.status = novoStatus;
+
+    playSuccessBeep();
+    showToast(`Unidade ${serial} removida da caixa com sucesso!`);
+
+    exibirDetalhesCaixaParaAjuste(currentAjusteCaixaId);
+    carregarListaTodasCaixas();
+    updateEmbalagemBoxSummary();
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao remover unidade da caixa no servidor!");
+  }
+}
+
+async function solicitarExcluirCaixa() {
+  if (!currentAjusteCaixaId) return;
+  await excluirCaixaDireto(currentAjusteCaixaId);
+}
+
+async function excluirCaixaDireto(caixaId) {
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  if (!confirm(`ATENÇÃO: Deseja realmente EXCLUIR toda a caixa [${caixaId}]?\n\n- Total de unidades afetadas: ${boxUnits.length}\n- Todas as unidades serão desvinculadas e liberadas para serem embaladas novamente.`)) {
+    return;
+  }
+
+  try {
+    // Desvincular todas as unidades da caixa
+    for (const unit of boxUnits) {
+      let novoStatus = 'FUNCIONAL_OK';
+      if (unit.funcional && unit.funcional.resultado === 'APROVADO') novoStatus = 'FUNCIONAL_OK';
+      else if (unit.cosmetico && unit.cosmetico.resultado === 'APROVADO') novoStatus = 'COSMETICO_OK';
+      else novoStatus = 'RECEBIDO';
+
+      await fetch(`/api/units/${unit.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: novoStatus,
+          embalagem: null
+        })
+      });
+
+      unit.embalagem = null;
+      unit.status = novoStatus;
+    }
+
+    playSuccessBeep();
+    showToast(`Caixa ${caixaId} excluída com sucesso! ${boxUnits.length} unidade(s) liberadas.`);
+
+    document.getElementById('painel-ajuste-caixa').classList.add('hidden');
+    currentAjusteCaixaId = null;
+    carregarListaTodasCaixas();
+    updateEmbalagemBoxSummary();
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao excluir caixa no servidor!");
+  }
+}
+
+function reimprimirEtiquetaCaixaAtualAjuste() {
+  if (!currentAjusteCaixaId) return;
+  reimprimirEtiquetaPorCaixaId(currentAjusteCaixaId);
+}
+
+function reimprimirEtiquetaPorCaixaId(caixaId) {
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  if (boxUnits.length === 0) {
+    alert(`A caixa [${caixaId}] não possui unidades associadas no momento.`);
+    return;
+  }
+  const modelo = boxUnits[0].modelo || '';
+  showZplModal(caixaId, modelo, boxUnits);
 }
 
 /* ==========================================================================
