@@ -2275,12 +2275,14 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
   const qtdStr = `QTD:${units.length}`;
   const modeloStr = modelo || (units.length > 0 ? units[0].modelo : 'PRODUTO');
 
-  // Build QR Code string containing MAC of all units in the box
-  let macList = units.map(u => (u.mac || '').trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase()).filter(Boolean);
-  if (macList.length === 0) {
-    macList = units.map(u => (u.serial || '').trim().toUpperCase());
-  }
-  const qrMacData = macList.join('\\0D\\0A') + (macList.length > 0 ? '\\0D\\0A' : '');
+  // Build QR Code string: GPON ID por unidade; se não tiver GPON ID, usa o Serial (SN)
+  const idList = units.map(u => {
+    const gpon = (u.gpon || '').trim().toUpperCase();
+    const serial = (u.serial || '').trim().toUpperCase();
+    return gpon || serial;
+  }).filter(Boolean);
+
+  const qrData = idList.join('\\0D\\0A') + (idList.length > 0 ? '\\0D\\0A' : '');
   const barcodeData = caixaId;
 
   // Se a impressora for de 203 DPI (~8 dots/mm) vs 300 DPI (~12 dots/mm), usamos coordenadas dimensionadas (fator 203/300 = 0.677)
@@ -2324,7 +2326,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FO1,262^GB800,0,4^FS
 ^FT29,250^A0N,28,29^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FT293,504^BQN,2,5
-^FH\\^FDLA,${qrMacData}^FS
+^FH\\^FDLA,${qrData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
   }
@@ -2371,7 +2373,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FO1,387^GB1180,0,6^FS
 ^FT43,370^A0N,42,43^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FT433,745^BQN,2,7
-^FH\\^FDLA,${qrMacData}^FS
+^FH\\^FDLA,${qrData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
 }
