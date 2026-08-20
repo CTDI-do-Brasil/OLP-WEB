@@ -2242,6 +2242,15 @@ function updateEmbalagemBoxSummary() {
     }
   }
 
+  const localidadeRefEl = document.getElementById('current-box-localidade');
+  if (localidadeRefEl) {
+    if (boxUnits.length > 0) {
+      localidadeRefEl.innerText = boxUnits[0].localidade || '-';
+    } else {
+      localidadeRefEl.innerText = '-';
+    }
+  }
+
   const unitsContainer = document.getElementById('current-box-units');
   if (!unitsContainer) return;
   unitsContainer.innerHTML = '';
@@ -2251,7 +2260,7 @@ function updateEmbalagemBoxSummary() {
         <div class="box-unit-chip">
           <span>${u.serial}</span>
           <span class="badge badge-success">${u.modelo}</span>
-          <small class="text-muted" style="margin-left:6px;">MAC: ${u.mac || '-'}</small>
+          <small class="text-muted" style="margin-left:6px;">${u.localidade || '-'}</small>
         </div>
       `;
     });
@@ -2274,6 +2283,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 
   const qtdStr = `QTD:${units.length}`;
   const modeloStr = modelo || (units.length > 0 ? units[0].modelo : 'PRODUTO');
+  const localidadeStr = (units.length > 0 && units[0].localidade) ? units[0].localidade.toUpperCase() : 'GERAL';
 
   // Build QR Code string: GPON ID por unidade; se não tiver GPON ID, usa o Serial (SN)
   const idList = units.map(u => {
@@ -2310,28 +2320,30 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^PW800
 ^LL640
 ^LS0
-^FO0,126^GB800,0,4^FS
+^FO0,125^GB800,0,6^FS
 ^FT33,209^A0B,17,17^FH\\^CI28^FD${dateStr}^FS^CI27
 ^FT120,204^A0B,17,17^FH\\^CI28^FD${timeStr}^FS^CI27
-^FO0,211^GB800,0,4^FS
-^FO133,127^GB0,87,4^FS
-^FO136,168^GB664,0,4^FS
+^FO0,210^GB800,0,6^FS
+^FO131,127^GB0,87,6^FS
+^FO136,167^GB664,0,6^FS
 ^FT140,162^A0N,31,31^FH\\^CI28^FDBOX ID:^FS^CI27
 ^BY2,3,18^FT397,160^BCN,,N,N
 ^FH\\^FD${barcodeData}^FS
 ^FT252,160^A0N,22,22^FH\\^CI28^FD${caixaId}^FS^CI27
-^FT140,206^A0N,28,29^FH\\^CI28^FD${modeloStr}^FS^CI27
-^FO325,171^GB0,41,4^FS
-^FT355,206^A0N,28,29^FH\\^CI28^FDBrasil TecPar^FS^CI27
-^FO1,262^GB800,0,4^FS
+^FT143,202^A0N,28,29^FH\\^CI28^FD${modeloStr}^FS^CI27
+^FO324,171^GB0,41,6^FS
+^FT355,202^A0N,28,29^FH\\^CI28^FDBrasil TecPar^FS^CI27
+^FO1,261^GB800,0,6^FS
 ^FT29,250^A0N,28,29^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FT293,504^BQN,2,5
 ^FH\\^FDLA,${qrData}^FS
+^FO324,213^GB0,51,6^FS
+^FT355,248^A0N,28,29^FH\\^CI28^FD${localidadeStr}^FS^CI27
 ^PQ1,0,1,Y
 ^XZ`;
   }
 
-  // Padrão 300 DPI (Novo Layout Atualizado)
+  // Padrão 300 DPI (Novo Layout Atualizado com Regional)
   return `CT~~CD,~CC^~CT~
 ^XA
 ~TA000
@@ -2356,24 +2368,26 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^LL945
 ^LS0
 ^FO313,52^GFA,3521,8280,69,:Z64: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:BDDB
-^FO0,186^GB1180,0,6^FS
+^FO0,184^GB1180,0,9^FS
 ^FO65,211^GFA,309,972,12,:Z64:eJx1k0EKAzEIRcVVyCmGLD2ly6GnGLIKnrKazLSNWpkqhMdX0x+RJxh+g3rv0i32c/nHEzWaAZ7nkvCt95mi/gAomb5lTPT5abPrX7Ng0D9XfXn9u6LTH4rJTDt/KAqtHYD7uU2v34tr4FdFCLyRJwYeF+/m15+dFKdPdw+vL3cDP0/rs4Hu4PRtT4bq9yU6vo02XkHWNYJ/5JrjRP8M5blG/5CN4+9/OoFL4M06tnBL/MlnAcr09e9qmb5eUPS/6A0BSqYPUBP/0yqJvuHJ/NfMUX9A+r6oYfq+Pu/xDUQ9jQ0=:122A
 ^FT49,309^A0B,25,25^FH\\^CI28^FD${dateStr}^FS^CI27
 ^FT178,301^A0B,25,25^FH\\^CI28^FD${timeStr}^FS^CI27
-^FO0,312^GB1180,0,6^FS
-^FO196,188^GB0,128,6^FS
-^FO201,248^GB979,0,6^FS
+^FO0,310^GB1180,0,9^FS
+^FO194,188^GB0,128,9^FS
+^FO201,246^GB979,0,9^FS
 ^FT206,239^A0N,46,46^FH\\^CI28^FDBOX ID:^FS^CI27
 ^BY3,3,26^FT587,237^BCN,,N,N
 ^FH\\^FD${barcodeData}^FS
 ^FT373,237^A0N,33,33^FH\\^CI28^FD${caixaId}^FS^CI27
-^FT206,304^A0N,42,43^FH\\^CI28^FD${modeloStr}^FS^CI27
-^FO480,252^GB0,61,6^FS
-^FT525,304^A0N,42,43^FH\\^CI28^FDBrasil TecPar^FS^CI27
-^FO1,387^GB1180,0,6^FS
+^FT211,299^A0N,42,43^FH\\^CI28^FD${modeloStr}^FS^CI27
+^FO478,252^GB0,61,9^FS
+^FT525,298^A0N,42,43^FH\\^CI28^FDBrasil TecPar^FS^CI27
+^FO1,385^GB1180,0,9^FS
 ^FT43,370^A0N,42,43^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FT433,745^BQN,2,7
 ^FH\\^FDLA,${qrData}^FS
+^FO479,314^GB0,75,9^FS
+^FT525,367^A0N,42,43^FH\\^CI28^FD${localidadeStr}^FS^CI27
 ^PQ1,0,1,Y
 ^XZ`;
 }
@@ -2560,13 +2574,21 @@ async function processEmbalarUnidade(e) {
     return;
   }
 
-  // Verificar se a caixa já possui unidades de outro modelo (Validação Rígida Automática de Modelo)
+  // Verificar se a caixa já possui unidades de outro modelo ou outra regional (Validação Rígida de Modelo e Regional)
   const existingBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
   if (existingBoxUnits.length > 0) {
     const modeloReferencia = existingBoxUnits[0].modelo;
+    const localidadeReferencia = existingBoxUnits[0].localidade;
+
     if (unit.modelo !== modeloReferencia) {
       playErrorBeep();
       alert(`BLOQUEIO DE MODELO:\nA caixa [${caixaId}] está configurada para o modelo [${modeloReferencia}].\nA unidade bipada é do modelo [${unit.modelo}] e não pode ser misturada nesta caixa!`);
+      return;
+    }
+
+    if (unit.localidade !== localidadeReferencia) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE REGIONAL / LOCALIDADE:\nA caixa [${caixaId}] pertence à regional [${localidadeReferencia}].\nA unidade bipada pertence à regional [${unit.localidade}] e não pode ser misturada nesta caixa!`);
       return;
     }
   }
