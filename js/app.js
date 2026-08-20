@@ -3041,65 +3041,6 @@ async function processEmbalarUnidade(e) {
 }
 
 /* ==========================================================================
-   MENU PALLET (SEQUENTIAL PACKAGING)
-   ========================================================================== */
-
-async function fetchCurrentPalletBoxCodeFromServer() {
-  try {
-    const res = await fetch('/api/sequence/caixa_pallet/current');
-    if (!res.ok) throw new Error("Erro de resposta");
-    const data = await res.json();
-    return data.formatted;
-  } catch (err) {
-    console.error(err);
-    return 'C00000001';
-  }
-}
-
-async function generateNextPalletBoxCodeFromServer() {
-  try {
-    const res = await fetch('/api/sequence/caixa_pallet/next', { method: 'POST' });
-    if (!res.ok) throw new Error("Erro de resposta");
-    const data = await res.json();
-    return data.formatted;
-  } catch (err) {
-    console.error(err);
-    alert("Erro ao gerar novo código de caixa no servidor!");
-    return null;
-  }
-}
-
-async function initPalletView() {
-  const codeField = document.getElementById('pallet-caixa-id');
-  if (codeField) {
-    codeField.placeholder = "Carregando...";
-    const code = await fetchCurrentPalletBoxCodeFromServer();
-    codeField.value = code;
-    updatePalletBoxSummary();
-  }
-}
-
-async function generateNewPalletBoxCode() {
-  const codeField = document.getElementById('pallet-caixa-id');
-  if (!codeField) return;
-
-  const currentCaixaId = codeField.value.trim().toUpperCase();
-  const currentBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentCaixaId);
-
-  // BLOQUEIO: Não permitir gerar nova caixa de pallet se a atual estiver sem nenhuma unidade
-  if (currentCaixaId && currentBoxUnits.length === 0) {
-    playErrorBeep();
-    alert(`A caixa/pallet atual [${currentCaixaId}] não possui nenhuma unidade registrada!\n\nVocê só pode gerar uma nova caixa após registrar pelo menos 1 unidade.`);
-    return;
-  }
-
-  codeField.placeholder = "Carregando...";
-  const code = await generateNextPalletBoxCodeFromServer();
-  if (code) {
-    codeField.value = code;
-    updatePalletBoxSummary();
-    showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
-/* ==========================================================================
    MENU PALLET (PALLETIZAÇÃO DE CAIXAS - P000000001, ATÉ 40 CAIXAS, TRAVA REGIONAL)
    ========================================================================== */
 
