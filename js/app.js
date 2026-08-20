@@ -362,10 +362,10 @@ async function handleLoginSubmit(e) {
   
   const loginInput = document.getElementById('login-username').value.trim().toUpperCase();
   const passwordInput = document.getElementById('login-password').value;
-  
+  const errorDiv = document.getElementById('login-error-msg');
+
   // Strict Regex Validation for NOME.SOBRENOME
   const loginRegex = /^[A-Z0-9\-_]+\.[A-Z0-9\-_]+$/;
-  const errorDiv = document.getElementById('login-error-msg');
 
   if (!loginRegex.test(loginInput)) {
     errorDiv.innerText = 'Formato de usuário inválido! Use NOME.SOBRENOME (ex: RODRIGO.BARRETO).';
@@ -375,6 +375,7 @@ async function handleLoginSubmit(e) {
 
   errorDiv.classList.add('hidden');
   
+  // 1. Tentar autenticação no Servidor / API
   try {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -382,19 +383,44 @@ async function handleLoginSubmit(e) {
       body: JSON.stringify({ username: loginInput, password: passwordInput })
     });
     
-    const data = await res.json();
-    if (!res.ok) {
-      errorDiv.innerText = data.error || 'Erro ao realizar login!';
-      errorDiv.classList.remove('hidden');
+    if (res.ok) {
+      const data = await res.json();
+      loginUser(data);
       return;
+    } else {
+      const data = await res.json().catch(() => ({}));
+      // Se o servidor respondeu com erro explícito de credenciais (401)
+      if (res.status === 401) {
+        errorDiv.innerText = data.error || 'Usuário ou senha incorretos!';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
     }
-
-    loginUser(data);
   } catch (err) {
-    console.error(err);
-    errorDiv.innerText = 'Erro ao se conectar ao servidor!';
-    errorDiv.classList.remove('hidden');
+    console.warn("Servidor offline ou inacessível, utilizando fallback local para autenticação:", err);
   }
+
+  // 2. Fallback de Autenticação Local / Offline
+  const availableUsers = (appState.users && appState.users.length > 0) ? appState.users : getSeedUsers();
+  const user = availableUsers.find(u => u.login.toUpperCase() === loginInput);
+
+  if (!user) {
+    errorDiv.innerText = 'Usuário não encontrado no sistema!';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (user.senha !== passwordInput) {
+    errorDiv.innerText = 'Senha incorreta!';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  loginUser({
+    login: user.login,
+    nome: user.nome,
+    role: user.role
+  });
 }
 
 
