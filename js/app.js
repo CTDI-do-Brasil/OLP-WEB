@@ -2337,7 +2337,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FT29,250^A0N,28,29^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FO324,213^GB0,51,6^FS
 ^FT355,248^A0N,28,29^FH\\^CI28^FD${localidadeStr}^FS^CI27
-^FT293,504^BQN,2,5
+^FO285,290^BQN,2,5
 ^FH\\^FDLA,${qrData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
@@ -2384,10 +2384,10 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FT525,298^A0N,42,43^FH\\^CI28^FDBrasil TecPar^FS^CI27
 ^FO1,381^GFA,97,1976,152,:Z64:eJxjYBh4wPgfA/yju43EAfLdRa6N5LuLtjYSB/4NtANwgFF3kQZG3UUaGBTuon+hMADFI9k2ku0uGttIHAAAxaVS6w==:824C
 ^FT43,370^A0N,42,43^FH\\^CI28^FD${qtdStr}^FS^CI27
-^FT433,745^BQN,2,7
-^FH\\^FDLA,${qrData}^FS
 ^FO479,314^GB0,75,9^FS
 ^FT525,367^A0N,42,43^FH\\^CI28^FD${localidadeStr}^FS^CI27
+^FO420,430^BQN,2,7
+^FH\\^FDLA,${qrData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
 }
