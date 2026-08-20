@@ -65,6 +65,7 @@ async function initDbConnection() {
     await pool.query(schemaSql);
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS sucata JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS reparo_eletronico JSONB');
+    await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS pallet JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS historico JSONB DEFAULT \'[]\'::jsonb');
     await pool.query('ALTER TABLE printers ADD COLUMN IF NOT EXISTS dpi INTEGER DEFAULT 300');
     
@@ -76,6 +77,13 @@ async function initDbConnection() {
       )
     `);
     
+    // Insert default 'pallet' sequence if it doesn't exist (format P000000001)
+    await pool.query(`
+      INSERT INTO sequence_generators (name, current_value)
+      VALUES ('pallet', 0)
+      ON CONFLICT (name) DO NOTHING
+    `);
+
     // Insert default 'caixa_pallet' sequence if it doesn't exist
     await pool.query(`
       INSERT INTO sequence_generators (name, current_value)
@@ -341,6 +349,7 @@ app.get('/api/units', async (req, res) => {
       cosmetico: row.cosmetico,
       funcional: row.funcional,
       embalagem: row.embalagem,
+      pallet: row.pallet,
       expedicao: row.expedicao,
       sucata: row.sucata,
       reparo_eletronico: row.reparo_eletronico,
@@ -411,7 +420,7 @@ app.post('/api/units', async (req, res) => {
 
 app.put('/api/units/:id', async (req, res) => {
   const { id } = req.params;
-  const { status, cosmetico, funcional, embalagem, expedicao, sucata, reparo_eletronico, historico } = req.body;
+  const { status, cosmetico, funcional, embalagem, pallet, expedicao, sucata, reparo_eletronico, historico } = req.body;
   try {
     await pool.query(
       `UPDATE units SET 
@@ -419,16 +428,18 @@ app.put('/api/units/:id', async (req, res) => {
         cosmetico = COALESCE($2, cosmetico),
         funcional = COALESCE($3, funcional),
         embalagem = COALESCE($4, embalagem),
-        expedicao = COALESCE($5, expedicao),
-        sucata = COALESCE($6, sucata),
-        reparo_eletronico = COALESCE($7, reparo_eletronico),
-        historico = COALESCE($8, historico)
-       WHERE id = $9`,
+        pallet = COALESCE($5, pallet),
+        expedicao = COALESCE($6, expedicao),
+        sucata = COALESCE($7, sucata),
+        reparo_eletronico = COALESCE($8, reparo_eletronico),
+        historico = COALESCE($9, historico)
+       WHERE id = $10`,
       [
         status, 
         cosmetico ? JSON.stringify(cosmetico) : null, 
         funcional ? JSON.stringify(funcional) : null, 
         embalagem ? JSON.stringify(embalagem) : null, 
+        pallet ? JSON.stringify(pallet) : null, 
         expedicao ? JSON.stringify(expedicao) : null, 
         sucata ? JSON.stringify(sucata) : null,
         reparo_eletronico ? JSON.stringify(reparo_eletronico) : null,
@@ -574,41 +585,40 @@ app.delete('/api/printers/:id', async (req, res) => {
   }
 });
 
-// SEQUENCE GENERATION ENDPOINTS
-app.get('/api/sequence/caixa_pallet/current', async (req, res) => {
+// SEQUENCE GENERATION ENDPOINTS FOR PALLET (P000000001)
+app.get('/api/sequence/pallet/current', async (req, res) => {
   try {
-    const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'caixa_pallet'");
+    const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'pallet'");
     const currentVal = result.rows[0] ? result.rows[0].current_value : 0;
-    // Format C00000001
     const nextSeq = currentVal + 1;
-    const formatted = 'C' + String(nextSeq).padStart(8, '0');
+    const formatted = 'P' + String(nextSeq).padStart(9, '0');
     res.json({ formatted, sequence: nextSeq });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.post('/api/sequence/caixa_pallet/next', async (req, res) => {
+app.post('/api/sequence/pallet/next', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const result = await client.query(
-      "SELECT current_value FROM sequence_generators WHERE name = 'caixa_pallet' FOR UPDATE"
+      "SELECT current_value FROM sequence_generators WHERE name = 'pallet' FOR UPDATE"
     );
     let nextVal = 1;
     if (result.rows[0]) {
       nextVal = result.rows[0].current_value + 1;
       await client.query(
-        "UPDATE sequence_generators SET current_value = $1 WHERE name = 'caixa_pallet'",
+        "UPDATE sequence_generators SET current_value = $1 WHERE name = 'pallet'",
         [nextVal]
       );
     } else {
       await client.query(
-        "INSERT INTO sequence_generators (name, current_value) VALUES ('caixa_pallet', 1)"
+        "INSERT INTO sequence_generators (name, current_value) VALUES ('pallet', 1)"
       );
     }
     await client.query('COMMIT');
-    const formatted = 'C' + String(nextVal).padStart(8, '0');
+    const formatted = 'P' + String(nextVal).padStart(9, '0');
     res.json({ formatted, sequence: nextVal });
   } catch (err) {
     await client.query('ROLLBACK');

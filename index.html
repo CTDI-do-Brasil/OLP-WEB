@@ -1148,20 +1148,27 @@
         <!-- 8.5 MENU PALLET VIEW -->
         <section id="view-embalagem-pallet" class="page-view">
           <div class="card glass-card">
-            <div class="card-header">
-              <h3><i class="fa-solid fa-pallet"></i> Processo de Embalagem - Pallet</h3>
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-pallet"></i> Processo de Embalagem - Palletização de Caixas</h3>
+              <div class="header-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="initPalletView()">
+                  <i class="fa-solid fa-rotate"></i> Atualizar
+                </button>
+              </div>
             </div>
             <div class="card-body">
 
               <div class="grid-2col">
                 <div>
-                  <form id="form-pallet" onsubmit="processPalletUnidade(event)">
+                  <form id="form-pallet" onsubmit="processPalletCaixa(event)">
                     <div class="grid-2col">
                       <div class="form-group">
-                        <label for="pallet-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sequencial)</label>
+                        <label for="pallet-code-id"><i class="fa-solid fa-pallet"></i> Código do Pallet (Sequencial)</label>
                         <div class="flex-row">
-                          <input type="text" id="pallet-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input">
-                          <button type="button" class="btn btn-secondary" onclick="generateNewPalletBoxCode()" style="margin-top: 15px;">Nova Caixa</button>
+                          <input type="text" id="pallet-code-id" readonly placeholder="Carregando..." class="bg-dark-input" style="font-weight: 700; color: #38bdf8;">
+                          <button type="button" class="btn btn-secondary" onclick="generateNewPalletCode()" style="margin-top: 15px;" title="Iniciar um novo Pallet sequencial">
+                            <i class="fa-solid fa-plus"></i> Novo Pallet
+                          </button>
                         </div>
                       </div>
 
@@ -1174,39 +1181,179 @@
                     </div>
 
                     <div class="form-group">
-                      <label for="pallet-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade Aprovada *</label>
-                      <input type="text" id="pallet-serial" placeholder="Bipe o SERIAL da unidade testada..." required>
+                      <label for="pallet-caixa-input"><i class="fa-solid fa-barcode"></i> Bipar Código da Caixa (ou Serial/GPON) *</label>
+                      <input type="text" id="pallet-caixa-input" placeholder="Bipe o código da CAIXA (Ex: C000000001) ou Serial da unidade..." required style="text-transform: uppercase;">
+                      <small class="text-muted" style="display: block; margin-top: 6px; font-size: 0.78rem;">
+                        <i class="fa-solid fa-info-circle" style="color: #60a5fa;"></i> <strong>Regras:</strong> Apenas caixas fechadas. Máximo de <strong>40 caixas por pallet</strong>. Bloqueio automático de mistura de <strong>Regionais</strong>.
+                      </small>
                     </div>
 
                     <button type="submit" class="btn btn-success btn-block">
-                      <i class="fa-solid fa-box-archive"></i> Embalar no Pallet
+                      <i class="fa-solid fa-boxes-packing"></i> Adicionar Caixa ao Pallet
                     </button>
                   </form>
                 </div>
 
                 <div class="box-status-card">
-                  <h4><i class="fa-solid fa-boxes-stacked"></i> Resumo da Caixa Pallet Atual</h4>
-                  <div class="box-stat-item">
-                    <span>Código da Caixa:</span>
-                    <strong id="pallet-box-code">C00000001</strong>
+                  <div class="flex-between">
+                    <h4><i class="fa-solid fa-boxes-stacked"></i> Resumo do Pallet Atual</h4>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="solicitarFechamentoManualPallet()" title="Fechar Pallet e Finalizar Lote">
+                      <i class="fa-solid fa-lock"></i> Fechar Pallet
+                    </button>
                   </div>
                   <div class="box-stat-item">
-                    <span>Modelo de Referência:</span>
-                    <strong id="pallet-box-modelo">-</strong>
+                    <span>Código do Pallet:</span>
+                    <strong id="pallet-stat-code" style="color: #38bdf8;">P000000001</strong>
                   </div>
                   <div class="box-stat-item">
-                    <span>Localidade de Referência:</span>
-                    <strong id="pallet-box-localidade">-</strong>
+                    <span>Regional / Localidade:</span>
+                    <strong id="pallet-stat-localidade">-</strong>
                   </div>
                   <div class="box-stat-item">
-                    <span>Total de Unidades na Caixa:</span>
-                    <strong id="pallet-box-count">0</strong>
+                    <span>Total de Caixas:</span>
+                    <strong id="pallet-stat-count" style="color: #34d399;">0 / 40 Caixas</strong>
                   </div>
-                  <div class="box-unit-list" id="pallet-box-units">
-                    <p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>
+                  <div class="box-stat-item">
+                    <span>Total de Unidades no Pallet:</span>
+                    <strong id="pallet-stat-total-unidades">0 Unidades</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Status do Pallet:</span>
+                    <strong id="pallet-stat-status"><span class="badge badge-warning">ABERTO</span></strong>
+                  </div>
+                  
+                  <h5 style="margin-top: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #94a3b8;"><i class="fa-solid fa-box"></i> Caixas neste Pallet:</h5>
+                  <div class="box-unit-list" id="pallet-box-list-container" style="max-height: 220px; overflow-y: auto;">
+                    <p class="text-muted text-center">Nenhuma caixa adicionada a este pallet ainda.</p>
                   </div>
                 </div>
               </div>
+
+              <!-- SEÇÃO DE CONSULTA E AJUSTES DE PALLETS REGISTRADOS -->
+              <div class="card glass-card margin-top" style="border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                <div class="card-header flex-between">
+                  <h3><i class="fa-solid fa-list-check"></i> Consulta & Ajustes de Pallets</h3>
+                </div>
+                <div class="card-body">
+                  <div class="grid-3col">
+                    <div class="form-group" style="grid-column: span 2;">
+                      <label for="pallet-search-input"><i class="fa-solid fa-magnifying-glass"></i> Buscar Pallet por Código do Pallet, Código da Caixa ou Serial</label>
+                      <div class="flex-row">
+                        <input type="text" id="pallet-search-input" placeholder="Ex: P000000001 ou C000000001..." style="text-transform: uppercase;" onkeyup="if(event.key==='Enter') buscarPalletParaAjuste()">
+                        <button type="button" class="btn btn-primary" onclick="buscarPalletParaAjuste()">
+                          <i class="fa-solid fa-search"></i> Buscar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="pallet-select-rapido"><i class="fa-solid fa-list"></i> Selecionar Pallet</label>
+                      <select id="pallet-select-rapido" onchange="selecionarPalletParaAjuste(this.value)">
+                        <option value="">-- Selecione um Pallet --</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- PAINEL DE AJUSTES DO PALLET SELECIONADO -->
+                  <div id="painel-ajuste-pallet" class="margin-top hidden">
+                    <div class="card glass-card" style="border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(15, 23, 42, 0.75);">
+                      <div class="card-header flex-between" style="background: rgba(30, 41, 59, 0.8);">
+                        <div>
+                          <h4 id="ajuste-pallet-title" style="color: #38bdf8; font-size: 1.2rem;"><i class="fa-solid fa-pallet"></i> Pallet: P000000001</h4>
+                        </div>
+                        <div class="flex-row" style="gap: 8px;">
+                          <button type="button" class="btn btn-danger btn-sm" onclick="solicitarExcluirPallet()" title="Desvincular todas as caixas e excluir este pallet">
+                            <i class="fa-solid fa-trash-can"></i> Excluir Pallet
+                          </button>
+                        </div>
+                      </div>
+                      <div class="card-body">
+                        <div class="grid-4col margin-bottom" style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px;">
+                          <div>
+                            <span class="text-muted" style="font-size: 0.8rem;">Regional / Localidade:</span>
+                            <div id="ajuste-pallet-localidade" style="font-weight: 600;">-</div>
+                          </div>
+                          <div>
+                            <span class="text-muted" style="font-size: 0.8rem;">Total de Caixas:</span>
+                            <div id="ajuste-pallet-total-caixas" style="font-weight: 600; color: #34d399;">0 / 40</div>
+                          </div>
+                          <div>
+                            <span class="text-muted" style="font-size: 0.8rem;">Total de Unidades:</span>
+                            <div id="ajuste-pallet-total-unidades" style="font-weight: 600;">0</div>
+                          </div>
+                          <div>
+                            <span class="text-muted" style="font-size: 0.8rem;">Status:</span>
+                            <div id="ajuste-pallet-status-badge"><span class="badge badge-warning">ABERTO</span></div>
+                          </div>
+                        </div>
+
+                        <!-- ADICIONAR CAIXA AO PALLET -->
+                        <div class="card glass-card margin-bottom" style="background: rgba(30, 41, 59, 0.4); border: 1px dashed rgba(56, 189, 248, 0.4);">
+                          <div class="card-header" style="padding: 8px 12px;">
+                            <h5 style="color: #38bdf8; font-size: 0.95rem;"><i class="fa-solid fa-plus-circle"></i> Adicionar Caixa neste Pallet</h5>
+                          </div>
+                          <div class="card-body" style="padding: 10px 12px;">
+                            <form id="form-ajuste-add-caixa-pallet" onsubmit="adicionarCaixaNoPalletAjuste(event)">
+                              <div class="flex-row">
+                                <input type="text" id="ajuste-pallet-add-caixa-input" placeholder="Bipe o código da Caixa (Ex: C000000001) ou Serial de uma unidade..." required style="flex: 1; text-transform: uppercase;">
+                                <button type="submit" class="btn btn-success">
+                                  <i class="fa-solid fa-plus"></i> Adicionar Caixa
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </div>
+
+                        <!-- TABELA DE CAIXAS DO PALLET -->
+                        <h5><i class="fa-solid fa-boxes-stacked"></i> Caixas Contidas no Pallet</h5>
+                        <div class="table-responsive margin-top">
+                          <table class="table">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Código da Caixa</th>
+                                <th>Modelo</th>
+                                <th>Regional / Localidade</th>
+                                <th>Qtd Unidades</th>
+                                <th>Data Embalagem</th>
+                                <th style="text-align: center;">Ações</th>
+                              </tr>
+                            </thead>
+                            <tbody id="tbody-ajuste-caixas-pallet">
+                              <!-- Injetado dinamicamente -->
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- TABELA DE TODOS OS PALLETS -->
+                  <div class="margin-top">
+                    <h4><i class="fa-solid fa-layer-group"></i> Todos os Pallets Registrados</h4>
+                    <div class="table-responsive margin-top">
+                      <table class="table" id="tabela-todos-pallets">
+                        <thead>
+                          <tr>
+                            <th>Código Pallet</th>
+                            <th>Regional / Localidade</th>
+                            <th>Qtd Caixas</th>
+                            <th>Total Unidades</th>
+                            <th>Status</th>
+                            <th>Data Paletização</th>
+                            <th style="text-align: center;">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody id="tbody-todos-pallets">
+                          <!-- Injetado dinamicamente -->
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
             </div>
           </div>
         </section>

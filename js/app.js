@@ -3073,127 +3073,682 @@ async function generateNewPalletBoxCode() {
     codeField.value = code;
     updatePalletBoxSummary();
     showToast(`Novo lote/caixa sequencial ${code} gerado no servidor!`);
+/* ==========================================================================
+   MENU PALLET (PALLETIZAÇÃO DE CAIXAS - P000000001, ATÉ 40 CAIXAS, TRAVA REGIONAL)
+   ========================================================================== */
+
+let currentAjustePalletId = null;
+let palletsFechadosSet = new Set();
+
+async function fetchCurrentPalletCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/pallet/current');
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    return 'P000000001';
   }
 }
 
-function updatePalletBoxSummary() {
-  const caixaId = document.getElementById('pallet-caixa-id').value.trim().toUpperCase();
-  document.getElementById('pallet-box-code').innerText = caixaId || 'C00000001';
-
-  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-  document.getElementById('pallet-box-count').innerText = boxUnits.length;
-
-  const modeloRefEl = document.getElementById('pallet-box-modelo');
-  const localidadeRefEl = document.getElementById('pallet-box-localidade');
-  const unitsContainer = document.getElementById('pallet-box-units');
-
-  if (boxUnits.length > 0) {
-    const refUnit = boxUnits[0];
-    modeloRefEl.innerText = refUnit.modelo;
-    localidadeRefEl.innerText = refUnit.localidade;
-
-    unitsContainer.innerHTML = '';
-    boxUnits.forEach(u => {
-      unitsContainer.innerHTML += `
-        <div class="box-unit-chip">
-          <span>${u.serial}</span>
-          <span class="badge badge-success">${u.modelo}</span>
-          <small class="text-muted" style="margin-left:8px;">${u.localidade}</small>
-        </div>
-      `;
-    });
-  } else {
-    modeloRefEl.innerText = '-';
-    localidadeRefEl.innerText = '-';
-    unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa ainda.</p>';
+async function generateNextPalletCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/pallet/next', { method: 'POST' });
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao gerar novo código de pallet no servidor!");
+    return null;
   }
 }
 
-async function processPalletUnidade(e) {
-  e.preventDefault();
-  const caixaId = document.getElementById('pallet-caixa-id').value.trim().toUpperCase();
-  const serial = document.getElementById('pallet-serial').value.trim().toUpperCase();
-
-  const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
-
-  // Validação rígida das regras obrigatórias de embalagem
-  const validacao = validarRegrasObrigatoriasEmbalagem(unit);
-  if (!validacao.valido) {
-    playErrorBeep();
-    alert(validacao.mensagem);
-    return;
-  }
-
-  // Check if unit is already packed
-  if (unit.embalagem) {
-    playErrorBeep();
-    alert(`Esta unidade já foi embalada na caixa: ${unit.embalagem.caixaId}!`);
-    return;
-  }
-
-  // Check if unit is rejected
-  if (unit.status && unit.status.includes('NOK')) {
-    playErrorBeep();
-    alert("Unidade com apontamento REPROVADO não pode ser embalada!");
-    return;
-  }
-
-  // 2. Validate same model and same location (referencing the receiving step: unit.modelo & unit.localidade)
-  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-  if (boxUnits.length > 0) {
-    const firstUnit = boxUnits[0];
-    if (unit.modelo !== firstUnit.modelo) {
-      alert(`Erro: A caixa só aceita unidades do mesmo modelo (${firstUnit.modelo}). Esta unidade é do modelo ${unit.modelo}.`);
-      return;
+async function initPalletView() {
+  const codeField = document.getElementById('pallet-code-id');
+  if (codeField) {
+    if (!codeField.value) {
+      codeField.placeholder = "Carregando...";
+      const code = await fetchCurrentPalletCodeFromServer();
+      codeField.value = code;
     }
-    if (unit.localidade !== firstUnit.localidade) {
-      alert(`Erro: A caixa só aceita unidades da mesma localidade (${firstUnit.localidade}). Esta unidade é da localidade ${unit.localidade}.`);
+    updatePalletSummary();
+  }
+  carregarListaTodosPallets();
+  populatePrinterDropdowns();
+}
+
+async function generateNewPalletCode() {
+  const codeField = document.getElementById('pallet-code-id');
+  if (!codeField) return;
+
+  const currentPalletId = codeField.value.trim().toUpperCase();
+  const currentPalletUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === currentPalletId);
+
+  // Se o pallet atual não tem caixas, avisa
+  if (currentPalletId && currentPalletUnits.length === 0) {
+    showToast(`O Pallet ${currentPalletId} já é um pallet novo sem caixas associadas.`);
+    return;
+  }
+
+  codeField.placeholder = "Carregando...";
+  const code = await generateNextPalletCodeFromServer();
+  if (code) {
+    codeField.value = code;
+    updatePalletSummary();
+    carregarListaTodosPallets();
+    showToast(`Novo Pallet ${code} iniciado com sucesso!`);
+    playSuccessBeep();
+  }
+}
+
+/**
+ * Obtém a lista de caixas agrupadas dentro de um Pallet
+ */
+function obterCaixasDoPallet(palletId) {
+  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+  const caixasMap = {};
+
+  unitsInPallet.forEach(u => {
+    const cId = (u.embalagem && u.embalagem.caixaId) ? u.embalagem.caixaId : 'SEM_CAIXA';
+    if (!caixasMap[cId]) {
+      caixasMap[cId] = {
+        caixaId: cId,
+        modelo: u.modelo || '-',
+        localidade: u.localidade || '-',
+        data: (u.embalagem && u.embalagem.data) ? u.embalagem.data : (u.pallet ? u.pallet.data : '-'),
+        unidades: []
+      };
+    }
+    caixasMap[cId].unidades.push(u);
+  });
+
+  return Object.values(caixasMap);
+}
+
+function updatePalletSummary() {
+  const codeField = document.getElementById('pallet-code-id');
+  if (!codeField) return;
+  const palletId = codeField.value.trim().toUpperCase() || 'P000000001';
+
+  document.getElementById('pallet-stat-code').innerText = palletId;
+
+  const caixas = obterCaixasDoPallet(palletId);
+  const totalUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId).length;
+
+  document.getElementById('pallet-stat-count').innerText = `${caixas.length} / 40 Caixas`;
+  document.getElementById('pallet-stat-total-unidades').innerText = `${totalUnits} Unidades`;
+
+  const isFechado = caixas.length >= 40 || palletsFechadosSet.has(palletId) || (caixas.length > 0 && caixas.every(c => c.unidades.every(u => u.pallet && u.pallet.fechado)));
+  const statusEl = document.getElementById('pallet-stat-status');
+  if (statusEl) {
+    statusEl.innerHTML = isFechado 
+      ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>' 
+      : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>';
+  }
+
+  const locEl = document.getElementById('pallet-stat-localidade');
+  if (locEl) {
+    locEl.innerText = caixas.length > 0 ? caixas[0].localidade : '-';
+  }
+
+  const listContainer = document.getElementById('pallet-box-list-container');
+  if (!listContainer) return;
+
+  if (caixas.length === 0) {
+    listContainer.innerHTML = '<p class="text-muted text-center">Nenhuma caixa adicionada a este pallet ainda.</p>';
+  } else {
+    listContainer.innerHTML = caixas.map((c, idx) => `
+      <div class="box-unit-chip flex-between" style="padding: 8px 12px; margin-bottom: 6px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.08);">
+        <div>
+          <strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong>
+          <span class="badge badge-primary" style="margin-left: 8px;">${c.modelo}</span>
+          <small class="text-muted" style="margin-left: 8px;">${c.localidade}</small>
+          <span class="badge badge-success" style="margin-left: 8px;">${c.unidades.length} un</span>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removerCaixaDoPalletDireto('${palletId}', '${c.caixaId}')" title="Remover esta caixa do pallet">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+    `).join('');
+  }
+}
+
+async function processPalletCaixa(e) {
+  e.preventDefault();
+  const palletId = document.getElementById('pallet-code-id').value.trim().toUpperCase();
+  const inputVal = document.getElementById('pallet-caixa-input').value.trim().toUpperCase();
+
+  if (!palletId) {
+    alert("Código do Pallet inválido!");
+    return;
+  }
+
+  // Verificar se o pallet já atingiu 40 caixas
+  const caixasNoPallet = obterCaixasDoPallet(palletId);
+  if (caixasNoPallet.length >= 40) {
+    playErrorBeep();
+    alert(`BLOQUEIO DE CAPACIDADE:\nO Pallet [${palletId}] já atingiu a capacidade máxima de 40 caixas! Inicie um novo pallet.`);
+    return;
+  }
+
+  // 1. Localizar as unidades da caixa pelo código da caixa OU por serial/GPON/MAC de uma unidade
+  let targetCaixaId = inputVal;
+  let boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+
+  if (boxUnits.length === 0) {
+    const singleUnit = appState.units.find(u => (u.serial === inputVal || u.gpon === inputVal || u.mac === inputVal) && u.embalagem);
+    if (singleUnit) {
+      targetCaixaId = singleUnit.embalagem.caixaId;
+      boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+    }
+  }
+
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert(`BLOQUEIO:\nNenhuma caixa embalada encontrada para o termo: "${inputVal}".\n\nApenas caixas que passaram pelo processo de Embalagem podem ser paletizadas.`);
+    return;
+  }
+
+  // Verificar se a caixa já está paletizada
+  const jaPaletizada = boxUnits.some(u => u.pallet && u.pallet.palletId);
+  if (jaPaletizada) {
+    const existingPallet = boxUnits.find(u => u.pallet && u.pallet.palletId).pallet.palletId;
+    playErrorBeep();
+    alert(`BLOQUEIO DE DUPLICIDADE:\nA caixa [${targetCaixaId}] já está vinculada ao Pallet [${existingPallet}]!`);
+    return;
+  }
+
+  // 2. VALIDAÇÃO RÍGIDA DE REGIONAL: Não pode misturar regional no mesmo pallet!
+  const caixaRegional = boxUnits[0].localidade || '';
+  if (caixasNoPallet.length > 0) {
+    const palletRegional = caixasNoPallet[0].localidade || '';
+    if (caixaRegional !== palletRegional) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE REGIONAL:\nO Pallet [${palletId}] pertence à Regional [${palletRegional}].\nA caixa [${targetCaixaId}] pertence à Regional [${caixaRegional}] e NÃO pode ser misturada neste pallet!`);
       return;
     }
   }
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
 
-  const embalagemData = {
-    caixaId,
+  const palletData = {
+    palletId,
     data: dateStr,
-    operador: appState.currentUser.login
+    operador: userAtual,
+    fechado: false
   };
 
-  registrarEventoHistorico(unit, {
-    tipo: 'EMBALAGEM',
-    titulo: `Embalado na Caixa Pallet [${caixaId}]`,
-    descricao: `Unidade embalada no Pallet / Caixa [${caixaId}] pelo operador [${appState.currentUser.login}]`,
-    operador: appState.currentUser.login,
-    data: dateStr,
-    statusAnterior: unit.status,
-    statusNovo: 'EMBALADO',
-    extra: embalagemData
-  });
-
   try {
-    const res = await fetch(`/api/units/${unit.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        status: 'EMBALADO',
-        embalagem: embalagemData,
-        historico: unit.historico
-      })
-    });
-    if (!res.ok) throw new Error("Erro de resposta");
+    // Vincula todas as unidades da caixa ao pallet
+    for (const u of boxUnits) {
+      u.pallet = palletData;
+      registrarEventoHistorico(u, {
+        tipo: 'PALLETIZACAO',
+        titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet [${palletId}]`,
+        descricao: `Caixa [${targetCaixaId}] (Regional: ${caixaRegional}) adicionada ao Pallet [${palletId}] pelo operador [${userAtual}]`,
+        operador: userAtual,
+        data: dateStr,
+        statusAnterior: u.status,
+        statusNovo: 'EMBALADO',
+        extra: { palletId, caixaId: targetCaixaId, regional: caixaRegional }
+      });
 
-    unit.embalagem = embalagemData;
-    unit.status = 'EMBALADO';
+      await fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'EMBALADO',
+          pallet: palletData,
+          historico: u.historico
+        })
+      });
+    }
 
-    document.getElementById('pallet-serial').value = '';
+    document.getElementById('pallet-caixa-input').value = '';
+    playSuccessBeep();
 
-    updatePalletBoxSummary();
-    showToast(`Unidade ${unit.serial} embalada no Pallet com sucesso!`);
+    updatePalletSummary();
+    carregarListaTodosPallets();
+
+    const updatedCaixas = obterCaixasDoPallet(palletId);
+    showToast(`Caixa ${targetCaixaId} (${boxUnits.length} un) adicionada ao Pallet ${palletId}! [${updatedCaixas.length}/40]`);
+
+    // Fechamento automático ao atingir 40 caixas
+    if (updatedCaixas.length >= 40) {
+      setTimeout(async () => {
+        await fecharPallet(palletId);
+      }, 300);
+    }
   } catch (err) {
     console.error(err);
-    alert("Erro ao salvar embalagem no servidor!");
+    playErrorBeep();
+    alert("Erro ao vincular caixa ao pallet no servidor!");
+  }
+}
+
+async function solicitarFechamentoManualPallet() {
+  const palletId = document.getElementById('pallet-code-id').value.trim().toUpperCase();
+  const caixas = obterCaixasDoPallet(palletId);
+
+  if (caixas.length === 0) {
+    playErrorBeep();
+    alert("Não há nenhuma caixa vinculada neste pallet para fechar.");
+    return;
+  }
+
+  if (caixas.length < 40) {
+    if (!confirm(`O Pallet [${palletId}] contém atualmente ${caixas.length} caixa(s) (menos que 40).\n\nDeseja realmente FECHAR o Pallet agora com ${caixas.length} caixas?`)) {
+      return;
+    }
+  }
+
+  await fecharPallet(palletId);
+}
+
+async function fecharPallet(palletId) {
+  palletsFechadosSet.add(palletId);
+  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  for (const u of unitsInPallet) {
+    if (u.pallet) {
+      u.pallet.fechado = true;
+      registrarEventoHistorico(u, {
+        tipo: 'FECHAMENTO_PALLET',
+        titulo: `Pallet [${palletId}] Fechado`,
+        descricao: `Pallet [${palletId}] finalizado com sucesso contendo ${obterCaixasDoPallet(palletId).length} caixas.`,
+        operador: userAtual,
+        data: dateStr,
+        statusNovo: 'EMBALADO',
+        extra: { palletId }
+      });
+
+      fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'EMBALADO',
+          pallet: u.pallet,
+          historico: u.historico
+        })
+      }).catch(err => console.error(err));
+    }
+  }
+
+  playSuccessBeep();
+  showToast(`Pallet ${palletId} fechado com sucesso!`);
+  updatePalletSummary();
+  carregarListaTodosPallets();
+
+  // Iniciar próximo pallet automaticamente
+  await generateNewPalletCode();
+}
+
+async function removerCaixaDoPalletDireto(palletId, caixaId) {
+  if (!confirm(`Deseja realmente remover a Caixa [${caixaId}] do Pallet [${palletId}]?\n\nA caixa continuará existindo com suas unidades e poderá ser paletizada em outro momento.`)) {
+    return;
+  }
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId && u.pallet && u.pallet.palletId === palletId);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  try {
+    for (const u of boxUnits) {
+      u.pallet = null;
+      registrarEventoHistorico(u, {
+        tipo: 'REMOCAO_PALLET',
+        titulo: `Caixa [${caixaId}] Removida do Pallet [${palletId}]`,
+        descricao: `A caixa [${caixaId}] foi desvinculada do Pallet [${palletId}] pelo operador [${userAtual}].`,
+        operador: userAtual,
+        data: dateStr,
+        statusNovo: 'EMBALADO',
+        extra: { caixaId, palletId }
+      });
+
+      await fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'EMBALADO',
+          pallet: null,
+          historico: u.historico
+        })
+      });
+    }
+
+    playSuccessBeep();
+    showToast(`Caixa ${caixaId} removida do Pallet ${palletId} com sucesso!`);
+    updatePalletSummary();
+    carregarListaTodosPallets();
+    if (currentAjustePalletId === palletId) {
+      exibirDetalhesPalletParaAjuste(palletId);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao remover caixa do pallet no servidor!");
+  }
+}
+
+/* ==========================================================================
+   CONSULTA & AJUSTES DE PALLETS
+   ========================================================================== */
+
+function carregarListaTodosPallets() {
+  const selectEl = document.getElementById('pallet-select-rapido');
+  const tbody = document.getElementById('tbody-todos-pallets');
+  if (!selectEl || !tbody) return;
+
+  // Agrupar unidades por palletId
+  const palletsMap = {};
+  appState.units.forEach(u => {
+    if (u.pallet && u.pallet.palletId) {
+      const pId = u.pallet.palletId;
+      if (!palletsMap[pId]) {
+        palletsMap[pId] = {
+          palletId: pId,
+          localidade: u.localidade || '-',
+          data: u.pallet.data || '-',
+          fechado: u.pallet.fechado || false,
+          unidades: []
+        };
+      }
+      palletsMap[pId].unidades.push(u);
+    }
+  });
+
+  const pallets = Object.values(palletsMap).sort((a, b) => b.palletId.localeCompare(a.palletId));
+
+  // Preencher Select
+  selectEl.innerHTML = '<option value="">-- Selecione um Pallet --</option>';
+  pallets.forEach(p => {
+    const caixas = obterCaixasDoPallet(p.palletId);
+    selectEl.innerHTML += `<option value="${p.palletId}">${p.palletId} - ${p.localidade} (${caixas.length}/40 caixas - ${p.unidades.length} un)</option>`;
+  });
+
+  // Preencher Tabela
+  if (pallets.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding: 20px;">Nenhum pallet registrado no sistema.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = pallets.map(p => {
+    const caixas = obterCaixasDoPallet(p.palletId);
+    const isFechado = caixas.length >= 40 || p.fechado || palletsFechadosSet.has(p.palletId);
+    const statusBadge = isFechado 
+      ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>` 
+      : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>`;
+
+    return `
+      <tr>
+        <td><strong style="color: #38bdf8;"><i class="fa-solid fa-pallet"></i> ${p.palletId}</strong></td>
+        <td>${p.localidade}</td>
+        <td><span class="badge ${caixas.length >= 40 ? 'badge-success' : 'badge-warning'}">${caixas.length} / 40 Caixas</span></td>
+        <td><strong>${p.unidades.length}</strong></td>
+        <td>${statusBadge}</td>
+        <td>${p.data}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="selecionarPalletParaAjuste('${p.palletId}')" title="Consultar e Ajustar Pallet">
+            <i class="fa-solid fa-pen-to-square"></i> Ajustar
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="excluirPalletDireto('${p.palletId}')" title="Excluir Pallet" style="margin-left: 5px;">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function buscarPalletParaAjuste() {
+  const query = document.getElementById('pallet-search-input').value.trim().toUpperCase();
+  if (!query) {
+    alert("Informe o código do Pallet, da Caixa ou o Serial para buscar!");
+    return;
+  }
+
+  let palletFound = null;
+  // 1. Busca por código direto do Pallet
+  const unitInPallet = appState.units.find(u => u.pallet && u.pallet.palletId === query);
+  if (unitInPallet) {
+    palletFound = unitInPallet.pallet.palletId;
+  } else {
+    // 2. Busca por código da caixa ou serial
+    const unitMatch = appState.units.find(u => 
+      u.serial === query || u.gpon === query || u.mac === query || (u.embalagem && u.embalagem.caixaId === query)
+    );
+    if (unitMatch && unitMatch.pallet && unitMatch.pallet.palletId) {
+      palletFound = unitMatch.pallet.palletId;
+    }
+  }
+
+  if (!palletFound) {
+    playErrorBeep();
+    alert(`Nenhum pallet encontrado para a busca: "${query}".`);
+    return;
+  }
+
+  playSuccessBeep();
+  document.getElementById('pallet-select-rapido').value = palletFound;
+  exibirDetalhesPalletParaAjuste(palletFound);
+}
+
+function selecionarPalletParaAjuste(palletId) {
+  if (!palletId) {
+    document.getElementById('painel-ajuste-pallet').classList.add('hidden');
+    currentAjustePalletId = null;
+    return;
+  }
+  document.getElementById('pallet-search-input').value = palletId;
+  exibirDetalhesPalletParaAjuste(palletId);
+}
+
+function exibirDetalhesPalletParaAjuste(palletId) {
+  currentAjustePalletId = palletId;
+  const painel = document.getElementById('painel-ajuste-pallet');
+  if (!painel) return;
+
+  const caixas = obterCaixasDoPallet(palletId);
+  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+
+  if (unitsInPallet.length === 0) {
+    painel.classList.add('hidden');
+    carregarListaTodosPallets();
+    return;
+  }
+
+  painel.classList.remove('hidden');
+  const localidade = caixas.length > 0 ? caixas[0].localidade : '-';
+  const isFechado = caixas.length >= 40 || unitsInPallet.every(u => u.pallet && u.pallet.fechado);
+
+  document.getElementById('ajuste-pallet-title').innerHTML = `<i class="fa-solid fa-pallet"></i> Pallet: ${palletId}`;
+  document.getElementById('ajuste-pallet-localidade').innerText = localidade;
+  document.getElementById('ajuste-pallet-total-caixas').innerText = `${caixas.length} / 40 Caixas`;
+  document.getElementById('ajuste-pallet-total-unidades').innerText = `${unitsInPallet.length} Unidades`;
+
+  const statusBadge = isFechado 
+    ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>` 
+    : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO (${caixas.length}/40)</span>`;
+  document.getElementById('ajuste-pallet-status-badge').innerHTML = statusBadge;
+
+  const tbody = document.getElementById('tbody-ajuste-caixas-pallet');
+  tbody.innerHTML = caixas.map((c, idx) => `
+    <tr>
+      <td>${idx + 1}</td>
+      <td><strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
+      <td>${c.modelo}</td>
+      <td>${c.localidade}</td>
+      <td><span class="badge badge-success">${c.unidades.length} un</span></td>
+      <td>${c.data}</td>
+      <td style="text-align: center;">
+        <button type="button" class="btn btn-danger btn-sm" onclick="removerCaixaDoPalletDireto('${palletId}', '${c.caixaId}')" title="Remover caixa deste pallet">
+          <i class="fa-solid fa-minus-circle"></i> Remover do Pallet
+        </button>
+      </td>
+    </tr>
+  `).join('');
+
+  painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function adicionarCaixaNoPalletAjuste(e) {
+  e.preventDefault();
+  if (!currentAjustePalletId) {
+    alert("Nenhum pallet selecionado para ajuste!");
+    return;
+  }
+
+  const inputEl = document.getElementById('ajuste-pallet-add-caixa-input');
+  const inputVal = inputEl.value.trim().toUpperCase();
+
+  const caixasNoPallet = obterCaixasDoPallet(currentAjustePalletId);
+  if (caixasNoPallet.length >= 40) {
+    playErrorBeep();
+    alert(`O Pallet [${currentAjustePalletId}] já atingiu a capacidade máxima de 40 caixas!`);
+    return;
+  }
+
+  let targetCaixaId = inputVal;
+  let boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+
+  if (boxUnits.length === 0) {
+    const singleUnit = appState.units.find(u => (u.serial === inputVal || u.gpon === inputVal || u.mac === inputVal) && u.embalagem);
+    if (singleUnit) {
+      targetCaixaId = singleUnit.embalagem.caixaId;
+      boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+    }
+  }
+
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert(`Nenhuma caixa embalada encontrada para o termo: "${inputVal}".`);
+    return;
+  }
+
+  if (boxUnits.some(u => u.pallet && u.pallet.palletId)) {
+    const existingPallet = boxUnits.find(u => u.pallet && u.pallet.palletId).pallet.palletId;
+    playErrorBeep();
+    alert(`A caixa [${targetCaixaId}] já está vinculada ao Pallet [${existingPallet}]!`);
+    return;
+  }
+
+  // Validação de Regional
+  const caixaRegional = boxUnits[0].localidade || '';
+  if (caixasNoPallet.length > 0) {
+    const palletRegional = caixasNoPallet[0].localidade || '';
+    if (caixaRegional !== palletRegional) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE REGIONAL:\nO Pallet aceita apenas a Regional [${palletRegional}]. A caixa é da Regional [${caixaRegional}].`);
+      return;
+    }
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
+  const palletData = {
+    palletId: currentAjustePalletId,
+    data: dateStr,
+    operador: userAtual,
+    fechado: false
+  };
+
+  try {
+    for (const u of boxUnits) {
+      u.pallet = palletData;
+      registrarEventoHistorico(u, {
+        tipo: 'PALLETIZACAO',
+        titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet [${currentAjustePalletId}]`,
+        descricao: `Caixa [${targetCaixaId}] adicionada ao Pallet [${currentAjustePalletId}] pelo painel de ajustes`,
+        operador: userAtual,
+        data: dateStr,
+        statusNovo: 'EMBALADO',
+        extra: { palletId: currentAjustePalletId, caixaId: targetCaixaId }
+      });
+
+      await fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'EMBALADO',
+          pallet: palletData,
+          historico: u.historico
+        })
+      });
+    }
+
+    inputEl.value = '';
+    playSuccessBeep();
+    showToast(`Caixa ${targetCaixaId} adicionada ao Pallet ${currentAjustePalletId} com sucesso!`);
+
+    exibirDetalhesPalletParaAjuste(currentAjustePalletId);
+    carregarListaTodosPallets();
+    updatePalletSummary();
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao adicionar caixa ao pallet no servidor!");
+  }
+}
+
+async function solicitarExcluirPallet() {
+  if (!currentAjustePalletId) return;
+  await excluirPalletDireto(currentAjustePalletId);
+}
+
+async function excluirPalletDireto(palletId) {
+  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+  const caixas = obterCaixasDoPallet(palletId);
+
+  if (!confirm(`ATENÇÃO: Deseja realmente EXCLUIR todo o Pallet [${palletId}]?\n\n- Total de Caixas afetadas: ${caixas.length}\n- Total de Unidades: ${unitsInPallet.length}\n\nTodas as caixas serão desvinculadas do pallet e permanecerão intactas no sistema.`)) {
+    return;
+  }
+
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  try {
+    for (const u of unitsInPallet) {
+      u.pallet = null;
+      registrarEventoHistorico(u, {
+        tipo: 'EXCLUSAO_PALLET',
+        titulo: `Pallet [${palletId}] Excluído / Cancelado`,
+        descricao: `O pallet [${palletId}] foi excluído pelo operador [${userAtual}]. Caixa e unidades desvinculadas.`,
+        operador: userAtual,
+        data: dateStr,
+        statusNovo: 'EMBALADO',
+        extra: { palletId }
+      });
+
+      await fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'EMBALADO',
+          pallet: null,
+          historico: u.historico
+        })
+      });
+    }
+
+    playSuccessBeep();
+    showToast(`Pallet ${palletId} excluído com sucesso! ${caixas.length} caixa(s) liberadas.`);
+
+    document.getElementById('painel-ajuste-pallet').classList.add('hidden');
+    currentAjustePalletId = null;
+    carregarListaTodosPallets();
+    updatePalletSummary();
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao excluir pallet no servidor!");
   }
 }
 
