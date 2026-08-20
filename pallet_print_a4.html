@@ -1,0 +1,250 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Identificação do Pallet - A4</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', 'Helvetica', sans-serif;
+    }
+
+    body {
+      background-color: #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .no-print {
+      margin-bottom: 20px;
+    }
+
+    .btn-print {
+      background-color: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .btn-print:hover {
+      background-color: #0369a1;
+    }
+
+    /* FOLHA A4 PAISAGEM (LANDSCAPE: 297mm x 210mm) */
+    .page-a4 {
+      width: 297mm;
+      height: 210mm;
+      background: white;
+      padding: 15mm 20mm;
+      position: relative;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    /* LOGO CTDI NO CANTO SUPERIOR DIREITO */
+    .header-logo {
+      position: absolute;
+      top: 15mm;
+      right: 20mm;
+    }
+    .header-logo img {
+      height: 48px;
+      width: auto;
+    }
+
+    /* CABEÇALHO DO PALLET (CENTRALIZADO) */
+    .pallet-header {
+      text-align: center;
+      margin-top: 5mm;
+    }
+
+    .pallet-title {
+      font-size: 48pt;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #000;
+      line-height: 1;
+    }
+
+    .pallet-code {
+      font-size: 68pt;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #000;
+      margin: 8px 0;
+      line-height: 1;
+    }
+
+    /* CÓDIGO DE BARRAS */
+    .barcode-container {
+      text-align: center;
+      margin-top: 4px;
+    }
+    .barcode-container svg {
+      width: 440px;
+      height: 90px;
+    }
+
+    /* RODAPÉ DIVIDIDO EM 2 COLUNAS */
+    .pallet-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: auto;
+      padding-bottom: 2mm;
+    }
+
+    /* COLUNA ESQUERDA (DADOS DO LOTE) */
+    .footer-left {
+      width: 42%;
+      text-align: left;
+    }
+
+    .footer-left .model-name {
+      font-size: 26pt;
+      font-weight: 900;
+      color: #000;
+      margin-bottom: 10px;
+    }
+
+    .footer-left .region-date {
+      font-size: 18pt;
+      font-weight: 900;
+      color: #000;
+      margin-bottom: 10px;
+    }
+
+    .footer-left .units-count {
+      font-size: 24pt;
+      font-weight: 900;
+      color: #000;
+    }
+
+    /* COLUNA DIREITA (MATRIZ DAS CAIXAS) */
+    .footer-right {
+      width: 56%;
+      text-align: right;
+    }
+
+    .boxes-title {
+      font-size: 22pt;
+      font-weight: 900;
+      color: #000;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+
+    .boxes-list {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10.5pt;
+      font-weight: bold;
+      line-height: 1.4;
+      color: #000;
+      white-space: pre-line;
+      text-align: right;
+    }
+
+    /* REGRAS PARA IMPRESSÃO EM PAPEL A4 */
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 0;
+      }
+      body {
+        background: none;
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-a4 {
+        width: 100vw;
+        height: 100vh;
+        box-shadow: none;
+        padding: 15mm 20mm;
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- BOTÃO DE IMPRESSÃO (Ocultado na folha impressa) -->
+  <div class="no-print">
+    <button class="btn-print" onclick="window.print()">
+      🖨️ Imprimir Folha A4 do Pallet
+    </button>
+  </div>
+
+  <!-- FOLHA A4 -->
+  <div class="page-a4">
+    <!-- LOGO CTDI -->
+    <div class="header-logo">
+      <img src="img/ctdi-logo.png" alt="CTDI" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'120\' height=\'40\' viewBox=\'0 0 120 40\'><text x=\'10\' y=\'28\' font-size=\'22\' font-weight=\'bold\' font-family=\'Arial\'>C T D I</text></svg>'">
+    </div>
+
+    <!-- TOPO: TÍTULO, CÓDIGO E BARCODE -->
+    <div class="pallet-header">
+      <div class="pallet-title">PALLET #</div>
+      <div class="pallet-code" id="pallet-code-val">P000000001</div>
+      <div class="barcode-container">
+        <svg id="barcode"></svg>
+      </div>
+    </div>
+
+    <!-- RODAPÉ: DADOS DO PRODUTO (ESQUERDA) + LISTAGEM DE CAIXAS (DIREITA) -->
+    <div class="pallet-footer">
+      <!-- Coluna Esquerda -->
+      <div class="footer-left">
+        <div class="model-name" id="model-val">ZXHN F6600P</div>
+        <div class="region-date" id="region-date-val">FELIZ/RS – 18/08/2026 15:25:25</div>
+        <div class="units-count" id="units-count-val">400 UNIDADES</div>
+      </div>
+
+      <!-- Coluna Direita -->
+      <div class="footer-right">
+        <div class="boxes-title">NUMERO DAS CAIXAS</div>
+        <div class="boxes-list" id="boxes-list-val">
+C000000001 / C000000002 / C000000003 / C000000004 / C000000005
+C000000006 / C000000007 / C000000008 / C000000009 / C000000010
+C000000011 / C000000012 / C000000013 / C000000014 / C000000015
+C000000016 / C000000017 / C000000018 / C000000019 / C000000020
+C000000021 / C000000022 / C000000023 / C000000024 / C000000025
+C000000026 / C000000027 / C000000028 / C000000029 / C000000030
+C000000031 / C000000032 / C000000033 / C000000034 / C000000035
+C000000036 / C000000037 / C000000038 / C000000039 / C000000040
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function renderBarcode(code) {
+      JsBarcode("#barcode", code, {
+        format: "CODE128",
+        width: 3.5,
+        height: 70,
+        displayValue: false,
+        margin: 0
+      });
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const palletCode = document.getElementById('pallet-code-val').innerText.trim();
+      renderBarcode(palletCode);
+    });
+  </script>
+</body>
+</html>

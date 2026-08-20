@@ -3155,6 +3155,11 @@ function updatePalletSummary() {
       : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>';
   }
 
+  const modeloEl = document.getElementById('pallet-stat-modelo');
+  if (modeloEl) {
+    modeloEl.innerText = caixas.length > 0 ? caixas[0].modelo : '-';
+  }
+
   const locEl = document.getElementById('pallet-stat-localidade');
   if (locEl) {
     locEl.innerText = caixas.length > 0 ? caixas[0].localidade : '-';
@@ -3462,10 +3467,13 @@ function carregarListaTodosPallets() {
         <td>${statusBadge}</td>
         <td>${p.data}</td>
         <td style="text-align: center;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="selecionarPalletParaAjuste('${p.palletId}')" title="Consultar e Ajustar Pallet">
-            <i class="fa-solid fa-pen-to-square"></i> Ajustar
+          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4Pallet('${p.palletId}')" title="Imprimir Folha A4 deste Pallet">
+            <i class="fa-solid fa-print"></i> A4
           </button>
-          <button type="button" class="btn btn-danger btn-sm" onclick="excluirPalletDireto('${p.palletId}')" title="Excluir Pallet" style="margin-left: 5px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="selecionarPalletParaAjuste('${p.palletId}')" title="Consultar e Ajustar Pallet" style="margin-left: 4px;">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="excluirPalletDireto('${p.palletId}')" title="Excluir Pallet" style="margin-left: 4px;">
             <i class="fa-solid fa-trash-can"></i>
           </button>
         </td>
@@ -3532,18 +3540,14 @@ function exibirDetalhesPalletParaAjuste(palletId) {
   }
 
   painel.classList.remove('hidden');
+  const modelo = caixas.length > 0 ? caixas[0].modelo : '-';
   const localidade = caixas.length > 0 ? caixas[0].localidade : '-';
-  const isFechado = caixas.length >= 40 || unitsInPallet.every(u => u.pallet && u.pallet.fechado);
 
   document.getElementById('ajuste-pallet-title').innerHTML = `<i class="fa-solid fa-pallet"></i> Pallet: ${palletId}`;
+  document.getElementById('ajuste-pallet-modelo').innerText = modelo;
   document.getElementById('ajuste-pallet-localidade').innerText = localidade;
   document.getElementById('ajuste-pallet-total-caixas').innerText = `${caixas.length} / 40 Caixas`;
   document.getElementById('ajuste-pallet-total-unidades').innerText = `${unitsInPallet.length} Unidades`;
-
-  const statusBadge = isFechado 
-    ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>` 
-    : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO (${caixas.length}/40)</span>`;
-  document.getElementById('ajuste-pallet-status-badge').innerHTML = statusBadge;
 
   const tbody = document.getElementById('tbody-ajuste-caixas-pallet');
   tbody.innerHTML = caixas.map((c, idx) => `
@@ -3563,6 +3567,291 @@ function exibirDetalhesPalletParaAjuste(palletId) {
   `).join('');
 
   painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* ==========================================================================
+   IMPRESSÃO DA FOLHA A4 DO PALLET (PAISAGEM - REGRAS DINÂMICAS)
+   ========================================================================== */
+
+function imprimirFolhaA4PalletAtual() {
+  const codeField = document.getElementById('pallet-code-id');
+  const palletId = codeField ? codeField.value.trim().toUpperCase() : null;
+  if (!palletId) {
+    alert("Código de Pallet inválido!");
+    return;
+  }
+  imprimirFolhaA4Pallet(palletId);
+}
+
+function imprimirFolhaA4Pallet(palletId) {
+  if (!palletId) {
+    alert("Pallet não selecionado!");
+    return;
+  }
+
+  const caixas = obterCaixasDoPallet(palletId);
+  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+
+  if (caixas.length === 0 || unitsInPallet.length === 0) {
+    playErrorBeep();
+    alert(`O Pallet [${palletId}] não possui nenhuma caixa bipada para impressão!`);
+    return;
+  }
+
+  // 1. Modelo: definido automaticamente pela primeira caixa registrada
+  const modelo = caixas[0].modelo || 'ZXHN F6600P';
+
+  // 2. Regional / Localidade: definida pela primeira caixa
+  const regional = caixas[0].localidade || 'REGIONAL';
+
+  // 3. Data e Hora atual do computador: DD/MM/AAAA HH:mm:ss
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dia = pad(now.getDate());
+  const mes = pad(now.getMonth() + 1);
+  const ano = now.getFullYear();
+  const hora = pad(now.getHours());
+  const min = pad(now.getMinutes());
+  const seg = pad(now.getSeconds());
+  const dataHoraFormatada = `${dia}/${mes}/${ano} ${hora}:${min}:${seg}`;
+
+  // 4. Quantidade de Unidades: cálculo dinâmico
+  const totalUnidades = unitsInPallet.length;
+
+  // 5. Matriz de Caixas: todas as caixas bipadas sem duplicidade, agrupadas em 5 caixas por linha
+  const caixasIds = caixas.map(c => c.caixaId);
+  const linhasCaixas = [];
+  for (let i = 0; i < caixasIds.length; i += 5) {
+    const chunk = caixasIds.slice(i, i + 5);
+    linhasCaixas.push(chunk.join(' / '));
+  }
+  const textoMatrizCaixas = linhasCaixas.join('\n');
+
+  // Gerar e abrir a janela de impressão A4 com estilos e renderizador de código de barras
+  const printWindow = window.open('', '_blank', 'width=1100,height=850');
+  if (!printWindow) {
+    alert("Por favor, permita pop-ups no navegador para abrir a folha de impressão!");
+    return;
+  }
+
+  const printHtml = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Identificação do Pallet - ${palletId}</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', 'Helvetica', sans-serif;
+    }
+    body {
+      background-color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+      margin: 0;
+    }
+    .no-print {
+      padding: 12px;
+      text-align: center;
+      background: #0f172a;
+      width: 100%;
+    }
+    .btn-print {
+      background-color: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      font-size: 15px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-print:hover {
+      background-color: #0369a1;
+    }
+    .page-a4 {
+      width: 297mm;
+      height: 205mm;
+      background: white;
+      padding: 12mm 18mm;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+    .header-logo {
+      position: absolute;
+      top: 12mm;
+      right: 18mm;
+    }
+    .header-logo img {
+      height: 46px;
+      width: auto;
+    }
+    .pallet-header {
+      text-align: center;
+      margin-top: 4mm;
+    }
+    .pallet-title {
+      font-size: 46pt;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #000;
+      line-height: 1;
+    }
+    .pallet-code {
+      font-size: 64pt;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #000;
+      margin: 6px 0;
+      line-height: 1;
+    }
+    .barcode-container {
+      text-align: center;
+      margin-top: 2px;
+    }
+    .barcode-container svg {
+      width: 440px;
+      height: 85px;
+    }
+    .pallet-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-top: auto;
+      padding-bottom: 2mm;
+    }
+    .footer-left {
+      width: 42%;
+      text-align: left;
+    }
+    .footer-left .model-name {
+      font-size: 24pt;
+      font-weight: 900;
+      color: #000;
+      margin-bottom: 8px;
+    }
+    .footer-left .region-date {
+      font-size: 17pt;
+      font-weight: 900;
+      color: #000;
+      margin-bottom: 8px;
+    }
+    .footer-left .units-count {
+      font-size: 22pt;
+      font-weight: 900;
+      color: #000;
+    }
+    .footer-right {
+      width: 56%;
+      text-align: right;
+    }
+    .boxes-title {
+      font-size: 20pt;
+      font-weight: 900;
+      color: #000;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+    .boxes-list {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 10.2pt;
+      font-weight: bold;
+      line-height: 1.35;
+      color: #000;
+      white-space: pre-line;
+      text-align: right;
+    }
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 0;
+      }
+      body {
+        background: none;
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-a4 {
+        width: 100vw;
+        height: 100vh;
+        box-shadow: none;
+        padding: 12mm 18mm;
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button class="btn-print" onclick="window.print()">
+      🖨️ Imprimir Folha A4 do Pallet (${palletId})
+    </button>
+  </div>
+
+  <div class="page-a4">
+    <div class="header-logo">
+      <img src="img/ctdi-logo.png" alt="CTDI" onerror="this.style.display='none'">
+    </div>
+
+    <div class="pallet-header">
+      <div class="pallet-title">PALLET #</div>
+      <div class="pallet-code">${palletId}</div>
+      <div class="barcode-container">
+        <svg id="barcode"></svg>
+      </div>
+    </div>
+
+    <div class="pallet-footer">
+      <div class="footer-left">
+        <div class="model-name">${modelo}</div>
+        <div class="region-date">${regional} – ${dataHoraFormatada}</div>
+        <div class="units-count">${totalUnidades} UNIDADES</div>
+      </div>
+
+      <div class="footer-right">
+        <div class="boxes-title">NUMERO DAS CAIXAS</div>
+        <div class="boxes-list">${textoMatrizCaixas}</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', () => {
+      try {
+        JsBarcode("#barcode", "${palletId}", {
+          format: "CODE128",
+          width: 3.5,
+          height: 70,
+          displayValue: false,
+          margin: 0
+        });
+      } catch(e) {
+        console.error("Erro ao gerar barcode:", e);
+      }
+      // Acionar impressão após carregar recursos
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    });
+  <\/script>
+</body>
+</html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(printHtml);
+  printWindow.document.close();
 }
 
 async function adicionarCaixaNoPalletAjuste(e) {
