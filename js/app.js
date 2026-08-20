@@ -2296,8 +2296,8 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^PMN
 ^LH0,0
 ^JMA
-^PR4,4
-~SD15
+^PR2,2
+~SD25
 ^JUS
 ^LRN
 ^CI27
@@ -2342,8 +2342,8 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^PMN
 ^LH0,0
 ^JMA
-^PR6,6
-~SD15
+^PR2,2
+~SD25
 ^JUS
 ^LRN
 ^CI27
