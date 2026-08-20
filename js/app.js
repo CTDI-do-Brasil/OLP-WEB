@@ -2349,7 +2349,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^XA
 ~TA000
 ~JSN
-^LT0
+^LT50
 ^MNN
 ^MTT
 ^PON
