@@ -2918,8 +2918,6 @@ async function fecharCaixaEmbalagem(caixaId) {
 /**
  * Validação de Regras Obrigatórias para Embalagem:
  * 1. Recebimento - Realizado
- * 2. Teste Funcional - Aprovado
- * 3. Cosmético - Aprovado
  */
 function validarRegrasObrigatoriasEmbalagem(unit) {
   if (!unit) {
@@ -2929,31 +2927,11 @@ function validarRegrasObrigatoriasEmbalagem(unit) {
     };
   }
 
-  const pendencias = [];
-
-  // Regra 1: Recebimento - Realizado
+  // Regra: Recebimento - Realizado
   if (!unit.dataRecebimento && !unit.serial) {
-    pendencias.push("Recebimento: PENDENTE / NÃO REALIZADO");
-  }
-
-  // Regra 2: Teste Funcional - Aprovado
-  if (!unit.funcional) {
-    pendencias.push("Teste Funcional: NÃO REALIZADO (Obrigatório APROVADO)");
-  } else if (unit.funcional.resultado !== 'APROVADO') {
-    pendencias.push(`Teste Funcional: NÃO APROVADO (Resultado atual: ${unit.funcional.resultado})`);
-  }
-
-  // Regra 3: Cosmético - Aprovado
-  if (!unit.cosmetico) {
-    pendencias.push("Apontamento Cosmético: NÃO REALIZADO (Obrigatório APROVADO)");
-  } else if (unit.cosmetico.resultado !== 'APROVADO') {
-    pendencias.push(`Apontamento Cosmético: NÃO APROVADO (Resultado atual: ${unit.cosmetico.resultado})`);
-  }
-
-  if (pendencias.length > 0) {
     return {
       valido: false,
-      mensagem: `BLOQUEIO DE EMBALAGEM:\nA unidade [${unit.serial || 'S/N'}] possui pendências para ser embalada:\n\nPendência(s) encontrada(s):\n• ${pendencias.join('\n• ')}`
+      mensagem: `BLOQUEIO DE EMBALAGEM:\nA unidade [${unit.serial || 'S/N'}] não possui registro de Recebimento Realizado no sistema.`
     };
   }
 
