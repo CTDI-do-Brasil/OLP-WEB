@@ -2957,21 +2957,14 @@ async function processEmbalarUnidade(e) {
     return;
   }
 
-  // Verificar se a caixa já possui unidades de outro modelo ou outra regional (Validação Rígida de Modelo e Regional)
+  // Verificar se a caixa já possui unidades de outro modelo (Validação Rígida de Modelo)
   const existingBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
   if (existingBoxUnits.length > 0) {
     const modeloReferencia = existingBoxUnits[0].modelo;
-    const localidadeReferencia = existingBoxUnits[0].localidade;
 
     if (unit.modelo !== modeloReferencia) {
       playErrorBeep();
       alert(`BLOQUEIO DE MODELO:\nA caixa [${caixaId}] está configurada para o modelo [${modeloReferencia}].\nA unidade bipada é do modelo [${unit.modelo}] e não pode ser misturada nesta caixa!`);
-      return;
-    }
-
-    if (unit.localidade !== localidadeReferencia) {
-      playErrorBeep();
-      alert(`BLOQUEIO DE REGIONAL / LOCALIDADE:\nA caixa [${caixaId}] pertence à regional [${localidadeReferencia}].\nA unidade bipada pertence à regional [${unit.localidade}] e não pode ser misturada nesta caixa!`);
       return;
     }
   }
@@ -3232,16 +3225,7 @@ async function processPalletCaixa(e) {
     return;
   }
 
-  // 2. VALIDAÇÃO RÍGIDA DE REGIONAL: Não pode misturar regional no mesmo pallet!
   const caixaRegional = boxUnits[0].localidade || '';
-  if (caixasNoPallet.length > 0) {
-    const palletRegional = caixasNoPallet[0].localidade || '';
-    if (caixaRegional !== palletRegional) {
-      playErrorBeep();
-      alert(`BLOQUEIO DE REGIONAL:\nO Pallet [${palletId}] pertence à Regional [${palletRegional}].\nA caixa [${targetCaixaId}] pertence à Regional [${caixaRegional}] e NÃO pode ser misturada neste pallet!`);
-      return;
-    }
-  }
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
@@ -3394,7 +3378,10 @@ async function removerCaixaDoPalletDireto(palletId, caixaId) {
           historico: u.historico
         })
       });
+      u.pallet = null;
     }
+
+    saveStateToStorage();
 
     playSuccessBeep();
     showToast(`Caixa ${caixaId} removida do Pallet ${palletId} com sucesso!`);
@@ -3951,16 +3938,7 @@ async function adicionarCaixaNoPalletAjuste(e) {
     return;
   }
 
-  // Validação de Regional
   const caixaRegional = boxUnits[0].localidade || '';
-  if (caixasNoPallet.length > 0) {
-    const palletRegional = caixasNoPallet[0].localidade || '';
-    if (caixaRegional !== palletRegional) {
-      playErrorBeep();
-      alert(`BLOQUEIO DE REGIONAL:\nO Pallet aceita apenas a Regional [${palletRegional}]. A caixa é da Regional [${caixaRegional}].`);
-      return;
-    }
-  }
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
@@ -3998,6 +3976,7 @@ async function adicionarCaixaNoPalletAjuste(e) {
     }
 
     inputEl.value = '';
+    saveStateToStorage();
     playSuccessBeep();
     showToast(`Caixa ${targetCaixaId} adicionada ao Pallet ${currentAjustePalletId} com sucesso!`);
 
@@ -4050,6 +4029,8 @@ async function excluirPalletDireto(palletId) {
         })
       });
     }
+
+    saveStateToStorage();
 
     playSuccessBeep();
     showToast(`Pallet ${palletId} excluído com sucesso! ${caixas.length} caixa(s) liberadas.`);
@@ -4332,6 +4313,7 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
 
     unit.embalagem = embalagemData;
     unit.status = 'EMBALADO';
+    saveStateToStorage();
 
     serialInput.value = '';
     playSuccessBeep();
@@ -4389,6 +4371,7 @@ async function removerUnidadeDaCaixaAjuste(unitId, serial) {
 
     unit.embalagem = null;
     unit.status = novoStatus;
+    saveStateToStorage();
 
     playSuccessBeep();
     showToast(`Unidade ${serial} removida da caixa com sucesso!`);
@@ -4450,6 +4433,8 @@ async function excluirCaixaDireto(caixaId) {
       unit.embalagem = null;
       unit.status = novoStatus;
     }
+
+    saveStateToStorage();
 
     playSuccessBeep();
     showToast(`Caixa ${caixaId} excluída com sucesso! ${boxUnits.length} unidade(s) liberadas.`);

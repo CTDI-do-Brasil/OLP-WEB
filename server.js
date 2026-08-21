@@ -420,33 +420,56 @@ app.post('/api/units', async (req, res) => {
 
 app.put('/api/units/:id', async (req, res) => {
   const { id } = req.params;
-  const { status, cosmetico, funcional, embalagem, pallet, expedicao, sucata, reparo_eletronico, historico } = req.body;
+  const body = req.body;
   try {
-    await pool.query(
-      `UPDATE units SET 
-        status = COALESCE($1, status),
-        cosmetico = COALESCE($2, cosmetico),
-        funcional = COALESCE($3, funcional),
-        embalagem = COALESCE($4, embalagem),
-        pallet = COALESCE($5, pallet),
-        expedicao = COALESCE($6, expedicao),
-        sucata = COALESCE($7, sucata),
-        reparo_eletronico = COALESCE($8, reparo_eletronico),
-        historico = COALESCE($9, historico)
-       WHERE id = $10`,
-      [
-        status, 
-        cosmetico ? JSON.stringify(cosmetico) : null, 
-        funcional ? JSON.stringify(funcional) : null, 
-        embalagem ? JSON.stringify(embalagem) : null, 
-        pallet ? JSON.stringify(pallet) : null, 
-        expedicao ? JSON.stringify(expedicao) : null, 
-        sucata ? JSON.stringify(sucata) : null,
-        reparo_eletronico ? JSON.stringify(reparo_eletronico) : null,
-        historico ? JSON.stringify(historico) : null,
-        id
-      ]
-    );
+    const fields = [];
+    const values = [];
+
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      values.push(body.status);
+      fields.push(`status = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'cosmetico')) {
+      values.push(body.cosmetico ? JSON.stringify(body.cosmetico) : null);
+      fields.push(`cosmetico = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'funcional')) {
+      values.push(body.funcional ? JSON.stringify(body.funcional) : null);
+      fields.push(`funcional = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'embalagem')) {
+      values.push(body.embalagem ? JSON.stringify(body.embalagem) : null);
+      fields.push(`embalagem = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'pallet')) {
+      values.push(body.pallet ? JSON.stringify(body.pallet) : null);
+      fields.push(`pallet = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'expedicao')) {
+      values.push(body.expedicao ? JSON.stringify(body.expedicao) : null);
+      fields.push(`expedicao = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'sucata')) {
+      values.push(body.sucata ? JSON.stringify(body.sucata) : null);
+      fields.push(`sucata = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'reparo_eletronico')) {
+      values.push(body.reparo_eletronico ? JSON.stringify(body.reparo_eletronico) : null);
+      fields.push(`reparo_eletronico = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'historico')) {
+      values.push(body.historico ? JSON.stringify(body.historico) : null);
+      fields.push(`historico = $${values.length}`);
+    }
+
+    if (fields.length === 0) {
+      return res.json({ success: true, message: 'Nenhum campo para atualizar.' });
+    }
+
+    values.push(id);
+    const sql = `UPDATE units SET ${fields.join(', ')} WHERE id = $${values.length}`;
+    await pool.query(sql, values);
+
     res.json({ success: true, message: 'Unidade atualizada!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
