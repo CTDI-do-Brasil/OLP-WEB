@@ -2793,6 +2793,7 @@ async function imprimirZplDiretoImpressora() {
         enviadoComSucesso = true;
         playSuccessBeep();
         showToast(`Impressão enviada com sucesso para ${printer.nome} [${printer.posto}] via rede!`);
+        closeZplModal();
         return;
       }
     } catch (serverErr) {
@@ -2819,6 +2820,7 @@ async function imprimirZplDiretoImpressora() {
         enviadoComSucesso = true;
         playSuccessBeep();
         showToast(`Impressão enviada com sucesso para ${printer.nome} pelo agente local!`);
+        closeZplModal();
         return;
       }
     } catch (localErr) {
