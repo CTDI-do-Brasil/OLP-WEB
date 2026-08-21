@@ -4261,20 +4261,13 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
     return;
   }
 
-  // Validação de modelo e regional
+  // Validação de modelo
   if (boxUnits.length > 0) {
     const refModelo = boxUnits[0].modelo;
-    const refLoc = boxUnits[0].localidade;
 
     if (unit.modelo !== refModelo) {
       playErrorBeep();
       alert(`BLOQUEIO DE MODELO:\nA caixa aceita apenas o modelo [${refModelo}]. A unidade informada é [${unit.modelo}].`);
-      return;
-    }
-
-    if (unit.localidade !== refLoc) {
-      playErrorBeep();
-      alert(`BLOQUEIO DE REGIONAL:\nA caixa aceita apenas a regional [${refLoc}]. A unidade informada é [${unit.localidade}].`);
       return;
     }
   }
