@@ -2970,11 +2970,36 @@ function validarRegrasObrigatoriasEmbalagem(unit) {
   return { valido: true };
 }
 
+// FILA DE PROCESSAMENTO SEQUENCIAL DE BIPAGEM RÁPIDA (EMBALAGEM)
+let isProcessingEmbalagemScan = false;
+const embalagemScanQueue = [];
+
 async function processEmbalarUnidade(e) {
   e.preventDefault();
-  const caixaId = document.getElementById('emb-caixa-id').value.trim().toUpperCase();
-  const serial = document.getElementById('emb-serial').value.trim().toUpperCase();
+  const caixaIdInput = document.getElementById('emb-caixa-id');
+  const serialInput = document.getElementById('emb-serial');
+  if (!caixaIdInput || !serialInput) return;
 
+  const caixaId = caixaIdInput.value.trim().toUpperCase();
+  const rawSerial = serialInput.value.trim().toUpperCase();
+
+  if (!rawSerial) return;
+  // Limpa imediatamente o input para o leitor de código de barras nunca acumular/encavalar
+  serialInput.value = '';
+
+  embalagemScanQueue.push({ serial: rawSerial, caixaId });
+  if (isProcessingEmbalagemScan) return;
+  isProcessingEmbalagemScan = true;
+
+  while (embalagemScanQueue.length > 0) {
+    const item = embalagemScanQueue.shift();
+    await executarEmbalarUnidadeItem(item.serial, item.caixaId);
+  }
+
+  isProcessingEmbalagemScan = false;
+}
+
+async function executarEmbalarUnidadeItem(serial, caixaId) {
   const unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
 
   // Validação rígida das regras obrigatórias de embalagem
@@ -3038,8 +3063,20 @@ async function processEmbalarUnidade(e) {
     extra: embalagemData
   });
 
+  // ATUALIZAÇÃO ATÔMICA IMEDIATA NO ESTADO LOCAL E NA TELA (Sem atraso de rede)
+  unit.embalagem = embalagemData;
+  unit.status = 'EMBALADO';
+  saveStateToStorage();
+
+  playSuccessBeep();
+  updateEmbalagemBoxSummary();
+
+  const updatedBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa ${caixaId}! [${updatedBoxUnits.length}/10]`);
+
+  // PERSISTÊNCIA ASSÍNCRONA NO SERVIDOR
   try {
-    const res = await fetch(`/api/units/${unit.id}`, {
+    fetch(`/api/units/${unit.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3047,31 +3084,18 @@ async function processEmbalarUnidade(e) {
         embalagem: embalagemData,
         historico: unit.historico
       })
+    }).catch(err => {
+      console.error("Erro ao persistir embalagem no servidor:", err);
     });
-    if (!res.ok) throw new Error("Erro de resposta");
-
-    unit.embalagem = embalagemData;
-    unit.status = 'EMBALADO';
-
-    document.getElementById('emb-serial').value = '';
-    playSuccessBeep();
-
-    // Atualiza resumo visual da caixa
-    updateEmbalagemBoxSummary();
-
-    const updatedBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-    showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa ${caixaId}! [${updatedBoxUnits.length}/10]`);
-
-    // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades na caixa
-    if (updatedBoxUnits.length >= 10) {
-      setTimeout(async () => {
-        await fecharCaixaEmbalagem(caixaId);
-      }, 300);
-    }
   } catch (err) {
-    console.error(err);
-    playErrorBeep();
-    alert("Erro ao salvar embalagem no servidor!");
+    console.error("Erro de requisição:", err);
+  }
+
+  // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades na caixa
+  if (updatedBoxUnits.length >= 10) {
+    setTimeout(async () => {
+      await fecharCaixaEmbalagem(caixaId);
+    }, 300);
   }
 }
 
@@ -3222,17 +3246,43 @@ function updatePalletSummary() {
   }
 }
 
+// FILA DE PROCESSAMENTO SEQUENCIAL DE BIPAGEM RÁPIDA (PALLET)
+let isProcessingPalletScan = false;
+const palletScanQueue = [];
+
 async function processPalletCaixa(e) {
   e.preventDefault();
-  const palletId = document.getElementById('pallet-code-id').value.trim().toUpperCase();
-  const inputVal = document.getElementById('pallet-caixa-input').value.trim().toUpperCase();
+  const palletIdEl = document.getElementById('pallet-code-id');
+  const inputEl = document.getElementById('pallet-caixa-input');
+  if (!palletIdEl || !inputEl) return;
 
+  const palletId = palletIdEl.value.trim().toUpperCase();
+  const rawInput = inputEl.value.trim().toUpperCase();
+  if (!rawInput) return;
+
+  // Limpa imediatamente o input para o scanner não encavalar
+  inputEl.value = '';
+
+  palletScanQueue.push({ inputVal: rawInput, palletId });
+  if (isProcessingPalletScan) return;
+  isProcessingPalletScan = true;
+
+  while (palletScanQueue.length > 0) {
+    const item = palletScanQueue.shift();
+    await executarPalletCaixaItem(item.inputVal, item.palletId);
+  }
+
+  isProcessingPalletScan = false;
+}
+
+async function executarPalletCaixaItem(inputVal, palletId) {
   if (!palletId) {
+    playErrorBeep();
     alert("Código do Pallet inválido!");
     return;
   }
 
-  // Verificar se o pallet já atingiu 40 caixas
+  // Validação: Capacidade Máxima do Pallet (40 Caixas)
   const caixasNoPallet = obterCaixasDoPallet(palletId);
   if (caixasNoPallet.length >= 40) {
     playErrorBeep();
@@ -3280,22 +3330,34 @@ async function processPalletCaixa(e) {
     fechado: false
   };
 
-  try {
-    // Vincula todas as unidades da caixa ao pallet
-    for (const u of boxUnits) {
-      u.pallet = palletData;
-      registrarEventoHistorico(u, {
-        tipo: 'PALLETIZACAO',
-        titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet [${palletId}]`,
-        descricao: `Caixa [${targetCaixaId}] (Regional: ${caixaRegional}) adicionada ao Pallet [${palletId}] pelo operador [${userAtual}]`,
-        operador: userAtual,
-        data: dateStr,
-        statusAnterior: u.status,
-        statusNovo: 'EMBALADO',
-        extra: { palletId, caixaId: targetCaixaId, regional: caixaRegional }
-      });
+  // ATUALIZAÇÃO ATÔMICA IMEDIATA NO ESTADO E NA TELA
+  for (const u of boxUnits) {
+    u.pallet = palletData;
+    registrarEventoHistorico(u, {
+      tipo: 'PALLETIZACAO',
+      titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet [${palletId}]`,
+      descricao: `Caixa [${targetCaixaId}] (Regional: ${caixaRegional}) adicionada ao Pallet [${palletId}] pelo operador [${userAtual}]`,
+      operador: userAtual,
+      data: dateStr,
+      statusAnterior: u.status,
+      statusNovo: 'EMBALADO',
+      extra: { palletId, caixaId: targetCaixaId, regional: caixaRegional }
+    });
+  }
 
-      await fetch(`/api/units/${u.id}`, {
+  saveStateToStorage();
+  playSuccessBeep();
+
+  updatePalletSummary();
+  carregarListaTodosPallets();
+
+  const updatedCaixas = obterCaixasDoPallet(palletId);
+  showToast(`Caixa ${targetCaixaId} (${boxUnits.length} un) adicionada ao Pallet ${palletId}! [${updatedCaixas.length}/40]`);
+
+  // PERSISTÊNCIA ASSÍNCRONA NO SERVIDOR
+  try {
+    Promise.all(boxUnits.map(u => 
+      fetch(`/api/units/${u.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -3303,28 +3365,19 @@ async function processPalletCaixa(e) {
           pallet: palletData,
           historico: u.historico
         })
-      });
-    }
-
-    document.getElementById('pallet-caixa-input').value = '';
-    playSuccessBeep();
-
-    updatePalletSummary();
-    carregarListaTodosPallets();
-
-    const updatedCaixas = obterCaixasDoPallet(palletId);
-    showToast(`Caixa ${targetCaixaId} (${boxUnits.length} un) adicionada ao Pallet ${palletId}! [${updatedCaixas.length}/40]`);
-
-    // Fechamento automático ao atingir 40 caixas
-    if (updatedCaixas.length >= 40) {
-      setTimeout(async () => {
-        await fecharPallet(palletId);
-      }, 300);
-    }
+      })
+    )).catch(err => {
+      console.error("Erro ao persistir palletização no servidor:", err);
+    });
   } catch (err) {
-    console.error(err);
-    playErrorBeep();
-    alert("Erro ao vincular caixa ao pallet no servidor!");
+    console.error("Erro no disparo de persistência:", err);
+  }
+
+  // Fechamento automático ao atingir 40 caixas
+  if (updatedCaixas.length >= 40) {
+    setTimeout(async () => {
+      await fecharPallet(palletId);
+    }, 300);
   }
 }
 
