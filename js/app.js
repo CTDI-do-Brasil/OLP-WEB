@@ -3618,14 +3618,10 @@ function imprimirFolhaA4Pallet(palletId) {
   // 4. Quantidade de Unidades: cálculo dinâmico
   const totalUnidades = unitsInPallet.length;
 
-  // 5. Matriz de Caixas: todas as caixas bipadas sem duplicidade, agrupadas em 5 caixas por linha
-  const caixasIds = caixas.map(c => c.caixaId);
-  const linhasCaixas = [];
-  for (let i = 0; i < caixasIds.length; i += 5) {
-    const chunk = caixasIds.slice(i, i + 5);
-    linhasCaixas.push(chunk.join(' / '));
-  }
-  const textoMatrizCaixas = linhasCaixas.join('\n');
+  // 5. Matriz de Caixas: formatação em grid de chips/tabela limpa
+  const caixasHtml = caixas.map(c => `
+    <div class="box-chip">${c.caixaId}</div>
+  `).join('');
 
   // Gerar e abrir a janela de impressão A4 com estilos e renderizador de código de barras
   const printWindow = window.open('', '_blank', 'width=1100,height=850');
@@ -3666,8 +3662,8 @@ function imprimirFolhaA4Pallet(palletId) {
       background-color: #0284c7;
       color: #fff;
       border: none;
-      padding: 10px 24px;
-      font-size: 15px;
+      padding: 10px 26px;
+      font-size: 16px;
       font-weight: bold;
       border-radius: 6px;
       cursor: pointer;
@@ -3677,99 +3673,145 @@ function imprimirFolhaA4Pallet(palletId) {
     }
     .page-a4 {
       width: 297mm;
-      height: 205mm;
+      height: 200mm;
       background: white;
-      padding: 12mm 18mm;
+      padding: 10mm 15mm;
       position: relative;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: flex-start;
       overflow: hidden;
     }
     .header-logo {
       position: absolute;
-      top: 12mm;
-      right: 18mm;
+      top: 10mm;
+      right: 15mm;
     }
     .header-logo img {
-      height: 46px;
+      height: 44px;
       width: auto;
     }
     .pallet-header {
       text-align: center;
-      margin-top: 4mm;
+      margin-top: 2mm;
+      margin-bottom: 8mm;
     }
     .pallet-title {
-      font-size: 46pt;
+      font-size: 38pt;
       font-weight: 900;
       letter-spacing: 2px;
       color: #000;
       line-height: 1;
     }
     .pallet-code {
-      font-size: 64pt;
+      font-size: 58pt;
       font-weight: 900;
-      letter-spacing: 3px;
+      letter-spacing: 4px;
       color: #000;
-      margin: 6px 0;
+      margin: 4px 0 6px 0;
       line-height: 1;
     }
     .barcode-container {
       text-align: center;
-      margin-top: 2px;
     }
     .barcode-container svg {
-      width: 440px;
-      height: 85px;
+      width: 480px;
+      height: 80px;
     }
-    .pallet-footer {
+    
+    /* GRID CENTRALIZADO (OPÇÃO A) */
+    .content-grid {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-top: auto;
-      padding-bottom: 2mm;
+      gap: 15mm;
+      margin-top: 4mm;
+      flex: 1;
     }
-    .footer-left {
-      width: 42%;
-      text-align: left;
+    
+    /* CARTÃO ESQUERDO: DADOS DO LOTE */
+    .card-lote {
+      flex: 1;
+      border: 2.5px solid #000;
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      background: #fdfdfd;
     }
-    .footer-left .model-name {
+    .data-group {
+      margin-bottom: 12px;
+    }
+    .data-group:last-child {
+      margin-bottom: 0;
+    }
+    .data-label {
+      font-size: 11pt;
+      font-weight: 800;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+      letter-spacing: 1px;
+    }
+    .data-value-model {
       font-size: 24pt;
       font-weight: 900;
       color: #000;
-      margin-bottom: 8px;
+      line-height: 1.1;
     }
-    .footer-left .region-date {
+    .data-value-region {
       font-size: 17pt;
+      font-weight: 800;
+      color: #000;
+      line-height: 1.2;
+    }
+    .data-value-units {
+      font-size: 26pt;
       font-weight: 900;
       color: #000;
-      margin-bottom: 8px;
+      letter-spacing: 1px;
     }
-    .footer-left .units-count {
-      font-size: 22pt;
+    
+    /* CARTÃO DIREITO: NÚMERO DAS CAIXAS */
+    .card-caixas {
+      flex: 1.4;
+      border: 2.5px solid #000;
+      border-radius: 10px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      background: #fdfdfd;
+    }
+    .caixas-header {
+      font-size: 18pt;
       font-weight: 900;
       color: #000;
-    }
-    .footer-right {
-      width: 56%;
-      text-align: right;
-    }
-    .boxes-title {
-      font-size: 20pt;
-      font-weight: 900;
-      color: #000;
-      margin-bottom: 6px;
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #000;
       text-transform: uppercase;
+      letter-spacing: 1px;
     }
-    .boxes-list {
+    .caixas-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-content: flex-start;
+      max-height: 75mm;
+      overflow: hidden;
+    }
+    .box-chip {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 10.2pt;
-      font-weight: bold;
-      line-height: 1.35;
+      font-size: 12.5pt;
+      font-weight: 900;
       color: #000;
-      white-space: pre-line;
-      text-align: right;
+      background: #eee;
+      border: 1.5px solid #333;
+      border-radius: 4px;
+      padding: 4px 8px;
+      letter-spacing: 0.5px;
     }
+    
     @media print {
       @page {
         size: A4 landscape;
@@ -3786,7 +3828,7 @@ function imprimirFolhaA4Pallet(palletId) {
         width: 100vw;
         height: 100vh;
         box-shadow: none;
-        padding: 12mm 18mm;
+        padding: 10mm 15mm;
         page-break-after: avoid;
       }
     }
@@ -3812,16 +3854,31 @@ function imprimirFolhaA4Pallet(palletId) {
       </div>
     </div>
 
-    <div class="pallet-footer">
-      <div class="footer-left">
-        <div class="model-name">${modelo}</div>
-        <div class="region-date">${regional} – ${dataHoraFormatada}</div>
-        <div class="units-count">${totalUnidades} UNIDADES</div>
+    <!-- GRID CENTRALIZADO (OPÇÃO A) -->
+    <div class="content-grid">
+      <!-- CARTÃO ESQUERDO -->
+      <div class="card-lote">
+        <div class="data-group">
+          <div class="data-label">Modelo do Equipamento:</div>
+          <div class="data-value-model">${modelo}</div>
+        </div>
+        <div class="data-group">
+          <div class="data-label">Regional / Data e Hora:</div>
+          <div class="data-value-region">${regional}</div>
+          <div style="font-size: 13pt; font-weight: 700; color: #333; margin-top: 2px;">${dataHoraFormatada}</div>
+        </div>
+        <div class="data-group">
+          <div class="data-label">Total de Unidades:</div>
+          <div class="data-value-units">${totalUnidades} UNIDADES</div>
+        </div>
       </div>
 
-      <div class="footer-right">
-        <div class="boxes-title">NUMERO DAS CAIXAS</div>
-        <div class="boxes-list">${textoMatrizCaixas}</div>
+      <!-- CARTÃO DIREITO -->
+      <div class="card-caixas">
+        <div class="caixas-header">Número das Caixas (${caixas.length})</div>
+        <div class="caixas-grid">
+          ${caixasHtml}
+        </div>
       </div>
     </div>
   </div>
@@ -3831,15 +3888,14 @@ function imprimirFolhaA4Pallet(palletId) {
       try {
         JsBarcode("#barcode", "${palletId}", {
           format: "CODE128",
-          width: 3.5,
-          height: 70,
+          width: 3.8,
+          height: 75,
           displayValue: false,
           margin: 0
         });
       } catch(e) {
         console.error("Erro ao gerar barcode:", e);
       }
-      // Acionar impressão após carregar recursos
       setTimeout(() => {
         window.print();
       }, 500);
