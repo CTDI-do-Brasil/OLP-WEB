@@ -29,6 +29,7 @@ let appState = {
 
 // INITIALIZATION & MOCK SEED DATA
 async function initApp() {
+  initResponsiveResolution();
   await loadStateFromServer();
   checkSession();
   setupEventListeners();
@@ -526,6 +527,11 @@ function navigate(viewId) {
   if (viewId === 'embalagem') initEmbalagemView();
   if (viewId === 'embalagem-pallet') initPalletView();
   if (viewId === 'embalagem-consulta') initEmbalagemConsultaView();
+
+  // Fechar gaveta em telas touch/menores ao clicar
+  if (window.innerWidth <= 1024) {
+    document.body.classList.remove('sidebar-open');
+  }
 }
 
 function updatePageTitle(viewId) {
@@ -589,6 +595,31 @@ function toggleAccordion(id) {
 function toggleTheme() {
   document.body.classList.toggle('light-theme');
   document.body.classList.toggle('dark-theme');
+}
+
+function toggleSidebarCollapse() {
+  if (window.innerWidth <= 1024) {
+    document.body.classList.toggle('sidebar-open');
+  } else {
+    document.body.classList.toggle('sidebar-collapsed');
+    const isCollapsed = document.body.classList.contains('sidebar-collapsed');
+    localStorage.setItem('wms_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+  }
+}
+
+function initResponsiveResolution() {
+  // Restaurar preferência de menu recolhido salva pelo usuário
+  const savedState = localStorage.getItem('wms_sidebar_collapsed');
+  if (savedState === 'true' && window.innerWidth > 1024) {
+    document.body.classList.add('sidebar-collapsed');
+  }
+
+  // Listener para ajustar o layout dinamicamente conforme redimensionamento do monitor ou janela
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 1024) {
+      document.body.classList.remove('sidebar-open');
+    }
+  });
 }
 
 /* ==========================================================================

@@ -256,14 +256,22 @@
       </div>
     </aside>
 
+    <!-- BACKDROP PARA DISPOSITIVOS TOUCH / TABLETS -->
+    <div class="sidebar-backdrop" onclick="toggleSidebarCollapse()"></div>
+
     <!-- MAIN CONTENT AREA -->
     <main class="main-content">
       
       <!-- TOPBAR HEADER -->
       <header class="topbar glass-header">
-        <div class="topbar-title">
-          <h1 id="page-title">Dashboard Inicial</h1>
-          <span id="page-subtitle" class="text-muted">Visão geral do sistema de recebimento e apontamentos</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button type="button" class="btn-sidebar-toggle" id="btn-sidebar-toggle" onclick="toggleSidebarCollapse()" title="Recolher / Expandir Menu Lateral">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <div class="topbar-title">
+            <h1 id="page-title">Dashboard Inicial</h1>
+            <span id="page-subtitle" class="text-muted">Visão geral do sistema de recebimento e apontamentos</span>
+          </div>
         </div>
 
         <div class="topbar-actions">
