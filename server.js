@@ -4,6 +4,7 @@ const { Client, Pool } = require('pg');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -606,6 +607,45 @@ app.delete('/api/printers/:id', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// DIRECT PRINT TO ZEBRA VIA SERVER TCP SOCKET (PORT 9100)
+app.post('/api/print/zebra', async (req, res) => {
+  const { ip, port, zpl } = req.body;
+  if (!ip || !zpl) {
+    return res.status(400).json({ error: 'IP da impressora e dados ZPL são obrigatórios!' });
+  }
+
+  const targetPort = parseInt(port, 10) || 9100;
+  const client = new net.Socket();
+  let finished = false;
+
+  client.setTimeout(4000);
+
+  client.connect(targetPort, ip, () => {
+    client.write(Buffer.from(zpl, 'utf-8'), () => {
+      client.end();
+      if (!finished) {
+        finished = true;
+        res.json({ success: true, message: `Etiqueta enviada com sucesso para a impressora ${ip}:${targetPort}!` });
+      }
+    });
+  });
+
+  client.on('error', (err) => {
+    if (!finished) {
+      finished = true;
+      res.status(502).json({ error: `Falha na conexão TCP com a impressora (${ip}:${targetPort}): ${err.message}` });
+    }
+  });
+
+  client.on('timeout', () => {
+    client.destroy();
+    if (!finished) {
+      finished = true;
+      res.status(504).json({ error: `Tempo limite esgotado ao conectar na impressora Zebra (${ip}:${targetPort}).` });
+    }
+  });
 });
 
 // SEQUENCE GENERATION ENDPOINTS FOR PALLET (P000000001)

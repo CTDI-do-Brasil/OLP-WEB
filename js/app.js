@@ -2773,32 +2773,62 @@ async function imprimirZplDiretoImpressora() {
   try {
     showToast(`Enviando etiqueta para impressora ${printer.nome} [${printer.dpi || 300} DPI] (${printer.ip})...`);
 
-    // Envia para o serviço local Python (Micro-serviço Zebra Socket)
-    const response = await fetch('http://localhost:5000/print', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ip: printer.ip,
-        port: printer.porta || 9100,
-        dpi: printer.dpi || 300,
-        zpl: zplParaEnviar,
-        boxId: lastGeneratedBoxId,
-        printerName: printer.nome,
-        posto: printer.posto
-      })
-    });
+    // 1. TENTATIVA 1: Envio direto pelo Servidor Backend via Socket TCP (Porta 9100)
+    // Não precisa de nenhum programa ou agente rodando no computador do operador!
+    let enviadoComSucesso = false;
+    try {
+      const serverRes = await fetch('/api/print/zebra', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ip: printer.ip,
+          port: printer.porta || 9100,
+          zpl: zplParaEnviar
+        })
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      playSuccessBeep();
-      showToast(`Impressão enviada com sucesso para ${printer.nome} [${printer.posto}]!`);
-    } else {
-      const errData = await response.json().catch(() => ({}));
-      throw new Error(errData.error || "Erro de comunicação com o serviço local");
+      if (serverRes.ok) {
+        enviadoComSucesso = true;
+        playSuccessBeep();
+        showToast(`Impressão enviada com sucesso para ${printer.nome} [${printer.posto}] via rede!`);
+        return;
+      }
+    } catch (serverErr) {
+      console.warn("Envio direto pelo servidor indisponível ou falhou, tentando agente local:", serverErr);
+    }
+
+    // 2. TENTATIVA 2: Agente local Python / Executável (localhost:5000)
+    try {
+      const localResponse = await fetch('http://localhost:5000/print', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ip: printer.ip,
+          port: printer.porta || 9100,
+          dpi: printer.dpi || 300,
+          zpl: zplParaEnviar,
+          boxId: lastGeneratedBoxId,
+          printerName: printer.nome,
+          posto: printer.posto
+        })
+      });
+
+      if (localResponse.ok) {
+        enviadoComSucesso = true;
+        playSuccessBeep();
+        showToast(`Impressão enviada com sucesso para ${printer.nome} pelo agente local!`);
+        return;
+      }
+    } catch (localErr) {
+      console.warn("Agente local HTTP localhost:5000 não acessível:", localErr);
+    }
+
+    if (!enviadoComSucesso) {
+      playErrorBeep();
+      alert(`Atenção: Não foi possível enviar a etiqueta para a impressora Zebra [${printer.nome}] (${printer.ip}:${printer.porta || 9100}).\n\nPossíveis motivos:\n1. A impressora está desligada ou fora da rede.\n2. Se o sistema estiver em HTTPS (olpweb.ctdibrasil.com.br), o navegador bloqueia conexões com 'localhost:5000' (Bloqueio de Conteúdo Misto). Clique no ícone de configurações ao lado da URL no navegador > 'Configurações do site' > 'Conteúdo não seguro' > 'Permitir'.\n\nVocê também pode copiar o ZPL ou baixar o arquivo .zpl abaixo.`);
     }
   } catch (err) {
-    console.warn("Serviço Python local não detectado ou erro de socket:", err);
-    alert(`Atenção: Não foi possível conectar ao Agente Python local (http://localhost:5000).\n\nCertifique-se de executar o script/executável "ZebraPrintAgent.exe" na máquina do operador para envio direto via rede/IP.\n\nVocê também pode copiar o ZPL ou baixar o arquivo .zpl.`);
+    console.error("Erro geral no envio de impressão:", err);
   }
 }
 
