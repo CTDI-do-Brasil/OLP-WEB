@@ -554,7 +554,8 @@ function updatePageTitle(viewId) {
       'recebimento': 'Relatório de Recebimento',
       'cosmetico': 'Relatório Cosmético',
       'funcional': 'Relatório Funcional',
-      'embalagem': 'Relatório de Embalagem',
+      'embalagem': 'Relatório de Formar Caixas (Embalagem)',
+      'pallet': 'Relatório de Pallet',
       'expedicao': 'Relatório de Expedição'
     };
     info = {
@@ -4656,11 +4657,12 @@ function setupRelatorioView(subType) {
     'recebimento': 'Relatório de Recebimento',
     'cosmetico': 'Relatório Cosmético',
     'funcional': 'Relatório Funcional',
-    'embalagem': 'Relatório de Embalagem',
+    'embalagem': 'Relatório de Formar Caixas (Embalagem)',
+    'pallet': 'Relatório de Pallet',
     'expedicao': 'Relatório de Expedição'
   };
 
-  document.getElementById('relatorio-title').innerHTML = `<i class="fa-solid fa-file-excel"></i> ${titleMap[subType]}`;
+  document.getElementById('relatorio-title').innerHTML = `<i class="fa-solid fa-file-excel"></i> ${titleMap[subType] || 'Relatório'}`;
   renderRelatorioTable();
 }
 function getReportFilteredUnits() {
@@ -4686,6 +4688,7 @@ function getReportFilteredUnits() {
     if (subType === 'cosmetico' && u.cosmetico && u.cosmetico.data) targetDate = String(u.cosmetico.data).slice(0, 10);
     if (subType === 'funcional' && u.funcional && u.funcional.data) targetDate = String(u.funcional.data).slice(0, 10);
     if (subType === 'embalagem' && u.embalagem && u.embalagem.data) targetDate = String(u.embalagem.data).slice(0, 10);
+    if (subType === 'pallet' && u.pallet && u.pallet.data) targetDate = String(u.pallet.data).slice(0, 10);
     if (subType === 'expedicao' && u.expedicao && u.expedicao.data) targetDate = String(u.expedicao.data).slice(0, 10);
 
     if (dataInicio && targetDate < dataInicio) return false;
@@ -4694,6 +4697,7 @@ function getReportFilteredUnits() {
     if (subType === 'cosmetico') return u.cosmetico != null && typeof u.cosmetico === 'object';
     if (subType === 'funcional') return u.funcional != null && typeof u.funcional === 'object';
     if (subType === 'embalagem') return u.embalagem != null && typeof u.embalagem === 'object';
+    if (subType === 'pallet') return u.pallet != null && typeof u.pallet === 'object';
     if (subType === 'expedicao') return u.expedicao != null && typeof u.expedicao === 'object';
 
     return true;
@@ -4798,24 +4802,76 @@ function renderRelatorioTable() {
     } else if (subType === 'embalagem') {
       theadHtml = `
         <tr>
-          <th>Data/Hora</th>
-          <th>Código da Caixa</th>
-          <th>Serial</th>
+          <th>Data Recebimento</th>
           <th>Fabricante</th>
           <th>Modelo</th>
-          <th>Operador</th>
+          <th>Serial</th>
+          <th>GPON</th>
+          <th>MAC</th>
+          <th>Localidade</th>
+          <th>Operador Rec.</th>
+          <th>Código Caixa</th>
+          <th>Data Embalagem</th>
+          <th>Operador Emb.</th>
+          <th>Status Atual</th>
         </tr>
       `;
       rowsHtml = filteredUnits.map(u => {
         if (!u.embalagem) return '';
         return `
           <tr>
-            <td>${u.embalagem.data || '-'}</td>
-            <td><strong>${u.embalagem.caixaId || '-'}</strong></td>
-            <td><code>${u.serial || '-'}</code></td>
+            <td>${u.dataRecebimento || '-'}</td>
             <td>${u.fabricante || '-'}</td>
             <td>${u.modelo || '-'}</td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td><code>${u.gpon || '-'}</code></td>
+            <td><code>${u.mac || '-'}</code></td>
+            <td>${u.localidade || '-'}</td>
+            <td>${u.operador || '-'}</td>
+            <td><strong>${u.embalagem.caixaId || '-'}</strong></td>
+            <td>${u.embalagem.data || '-'}</td>
             <td>${u.embalagem.operador || '-'}</td>
+            <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status || '-'}</span></td>
+          </tr>
+        `;
+      }).join('');
+    } else if (subType === 'pallet') {
+      theadHtml = `
+        <tr>
+          <th>Código Pallet</th>
+          <th>Status Pallet</th>
+          <th>Código Caixa</th>
+          <th>Data Recebimento</th>
+          <th>Fabricante</th>
+          <th>Modelo</th>
+          <th>Serial</th>
+          <th>GPON</th>
+          <th>MAC</th>
+          <th>Localidade</th>
+          <th>Operador Rec.</th>
+          <th>Data Pallet</th>
+          <th>Operador Pallet</th>
+          <th>Status Atual</th>
+        </tr>
+      `;
+      rowsHtml = filteredUnits.map(u => {
+        if (!u.pallet) return '';
+        return `
+          <tr>
+            <td><strong>${u.pallet.palletId || '-'}</strong></td>
+            <td><span class="badge ${u.pallet.fechado ? 'badge-success' : 'badge-warning'}">${u.pallet.fechado ? 'FECHADO' : 'ABERTO'}</span></td>
+            <td><strong>${u.embalagem ? u.embalagem.caixaId : '-'}</strong></td>
+            <td>${u.dataRecebimento || '-'}</td>
+            <td>${u.fabricante || '-'}</td>
+            <td>${u.modelo || '-'}</td>
+            <td><code>${u.serial || '-'}</code></td>
+            <td><code>${u.gpon || '-'}</code></td>
+            <td><code>${u.mac || '-'}</code></td>
+            <td>${u.localidade || '-'}</td>
+            <td>${u.operador || '-'}</td>
+            <td>${u.pallet.data || '-'}</td>
+            <td>${u.pallet.operador || '-'}</td>
+            <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status || '-'}</span></td>
           </tr>
         `;
       }).join('');
@@ -4910,12 +4966,38 @@ function exportCurrentReportToExcel() {
       filteredUnits.forEach(u => {
         if (!u.embalagem) return;
         dataRows.push({
-          'Data Embalagem': u.embalagem.data || '-',
-          'Código Caixa': u.embalagem.caixaId || '-',
-          'Serial': u.serial || '-',
+          'Data Recebimento': u.dataRecebimento || '-',
           'Fabricante': u.fabricante || '-',
           'Modelo': u.modelo || '-',
-          'Operador': u.embalagem.operador || '-'
+          'Serial': u.serial || '-',
+          'GPON': u.gpon || '-',
+          'MAC': u.mac || '-',
+          'Localidade': u.localidade || '-',
+          'Operador Recebimento': u.operador || '-',
+          'Código Caixa': u.embalagem.caixaId || '-',
+          'Data Embalagem': u.embalagem.data || '-',
+          'Operador Embalagem': u.embalagem.operador || '-',
+          'Status Atual': u.status || '-'
+        });
+      });
+    } else if (subType === 'pallet') {
+      filteredUnits.forEach(u => {
+        if (!u.pallet) return;
+        dataRows.push({
+          'Código Pallet': u.pallet.palletId || '-',
+          'Status Pallet': u.pallet.fechado ? 'FECHADO' : 'ABERTO',
+          'Código Caixa': u.embalagem ? u.embalagem.caixaId : '-',
+          'Data Recebimento': u.dataRecebimento || '-',
+          'Fabricante': u.fabricante || '-',
+          'Modelo': u.modelo || '-',
+          'Serial': u.serial || '-',
+          'GPON': u.gpon || '-',
+          'MAC': u.mac || '-',
+          'Localidade': u.localidade || '-',
+          'Operador Recebimento': u.operador || '-',
+          'Data Pallet': u.pallet.data || '-',
+          'Operador Pallet': u.pallet.operador || '-',
+          'Status Atual': u.status || '-'
         });
       });
     } else if (subType === 'expedicao') {
