@@ -12,151 +12,174 @@
       padding: 0;
       font-family: 'Arial', 'Helvetica', sans-serif;
     }
-
     body {
-      background-color: #f1f5f9;
+      background-color: #fff;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px;
+      padding: 0;
+      margin: 0;
     }
-
     .no-print {
-      margin-bottom: 20px;
+      padding: 12px;
+      text-align: center;
+      background: #0f172a;
+      width: 100%;
     }
-
     .btn-print {
       background-color: #0284c7;
       color: #fff;
       border: none;
-      padding: 12px 28px;
+      padding: 10px 26px;
       font-size: 16px;
       font-weight: bold;
       border-radius: 6px;
       cursor: pointer;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     .btn-print:hover {
       background-color: #0369a1;
     }
-
-    /* FOLHA A4 PAISAGEM (LANDSCAPE: 297mm x 210mm) */
     .page-a4 {
       width: 297mm;
-      height: 210mm;
+      height: 200mm;
       background: white;
-      padding: 15mm 20mm;
+      padding: 10mm 15mm;
       position: relative;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: flex-start;
+      overflow: hidden;
     }
-
-    /* LOGO CTDI NO CANTO SUPERIOR DIREITO */
     .header-logo {
       position: absolute;
-      top: 15mm;
-      right: 20mm;
+      top: 10mm;
+      right: 15mm;
     }
     .header-logo img {
-      height: 48px;
+      height: 44px;
       width: auto;
     }
-
-    /* CABEÇALHO DO PALLET (CENTRALIZADO) */
     .pallet-header {
       text-align: center;
-      margin-top: 5mm;
+      margin-top: 2mm;
+      margin-bottom: 8mm;
     }
-
     .pallet-title {
-      font-size: 48pt;
+      font-size: 38pt;
       font-weight: 900;
       letter-spacing: 2px;
       color: #000;
       line-height: 1;
     }
-
     .pallet-code {
-      font-size: 68pt;
+      font-size: 58pt;
       font-weight: 900;
-      letter-spacing: 3px;
+      letter-spacing: 4px;
       color: #000;
-      margin: 8px 0;
+      margin: 4px 0 6px 0;
       line-height: 1;
     }
-
-    /* CÓDIGO DE BARRAS */
     .barcode-container {
       text-align: center;
-      margin-top: 4px;
     }
     .barcode-container svg {
-      width: 440px;
-      height: 90px;
+      width: 480px;
+      height: 80px;
     }
-
-    /* RODAPÉ DIVIDIDO EM 2 COLUNAS */
-    .pallet-footer {
+    
+    /* GRID CENTRALIZADO (OPÇÃO A) */
+    .content-grid {
       display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      margin-top: auto;
-      padding-bottom: 2mm;
+      gap: 15mm;
+      margin-top: 4mm;
+      flex: 1;
     }
-
-    /* COLUNA ESQUERDA (DADOS DO LOTE) */
-    .footer-left {
-      width: 42%;
-      text-align: left;
+    
+    /* CARTÃO ESQUERDO: DADOS DO LOTE */
+    .card-lote {
+      flex: 1;
+      border: 2.5px solid #000;
+      border-radius: 10px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      background: #fdfdfd;
     }
-
-    .footer-left .model-name {
-      font-size: 26pt;
-      font-weight: 900;
-      color: #000;
-      margin-bottom: 10px;
+    .data-group {
+      margin-bottom: 12px;
     }
-
-    .footer-left .region-date {
-      font-size: 18pt;
-      font-weight: 900;
-      color: #000;
-      margin-bottom: 10px;
+    .data-group:last-child {
+      margin-bottom: 0;
     }
-
-    .footer-left .units-count {
+    .data-label {
+      font-size: 11pt;
+      font-weight: 800;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+      letter-spacing: 1px;
+    }
+    .data-value-model {
       font-size: 24pt;
       font-weight: 900;
       color: #000;
+      line-height: 1.1;
     }
-
-    /* COLUNA DIREITA (MATRIZ DAS CAIXAS) */
-    .footer-right {
-      width: 56%;
-      text-align: right;
+    .data-value-region {
+      font-size: 17pt;
+      font-weight: 800;
+      color: #000;
+      line-height: 1.2;
     }
-
-    .boxes-title {
-      font-size: 22pt;
+    .data-value-units {
+      font-size: 26pt;
       font-weight: 900;
       color: #000;
-      margin-bottom: 8px;
-      text-transform: uppercase;
+      letter-spacing: 1px;
     }
-
-    .boxes-list {
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 10.5pt;
-      font-weight: bold;
-      line-height: 1.4;
+    
+    /* CARTÃO DIREITO: NÚMERO DAS CAIXAS */
+    .card-caixas {
+      flex: 1.4;
+      border: 2.5px solid #000;
+      border-radius: 10px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      background: #fdfdfd;
+    }
+    .caixas-header {
+      font-size: 18pt;
+      font-weight: 900;
       color: #000;
-      white-space: pre-line;
-      text-align: right;
+      text-align: center;
+      margin-bottom: 12px;
+      padding-bottom: 6px;
+      border-bottom: 2px solid #000;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
-
-    /* REGRAS PARA IMPRESSÃO EM PAPEL A4 */
+    .caixas-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-content: flex-start;
+      max-height: 75mm;
+      overflow: hidden;
+    }
+    .box-chip {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 12.5pt;
+      font-weight: 900;
+      color: #000;
+      background: #eee;
+      border: 1.5px solid #333;
+      border-radius: 4px;
+      padding: 4px 8px;
+      letter-spacing: 0.5px;
+    }
+    
     @media print {
       @page {
         size: A4 landscape;
@@ -173,29 +196,24 @@
         width: 100vw;
         height: 100vh;
         box-shadow: none;
-        padding: 15mm 20mm;
+        padding: 10mm 15mm;
         page-break-after: avoid;
       }
     }
   </style>
 </head>
 <body>
-
-  <!-- BOTÃO DE IMPRESSÃO (Ocultado na folha impressa) -->
   <div class="no-print">
     <button class="btn-print" onclick="window.print()">
       🖨️ Imprimir Folha A4 do Pallet
     </button>
   </div>
 
-  <!-- FOLHA A4 -->
   <div class="page-a4">
-    <!-- LOGO CTDI -->
     <div class="header-logo">
-      <img src="img/ctdi-logo.png" alt="CTDI" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'120\' height=\'40\' viewBox=\'0 0 120 40\'><text x=\'10\' y=\'28\' font-size=\'22\' font-weight=\'bold\' font-family=\'Arial\'>C T D I</text></svg>'">
+      <img src="img/ctdi-logo.png" alt="CTDI" onerror="this.style.display='none'">
     </div>
 
-    <!-- TOPO: TÍTULO, CÓDIGO E BARCODE -->
     <div class="pallet-header">
       <div class="pallet-title">PALLET #</div>
       <div class="pallet-code" id="pallet-code-val">P000000001</div>
@@ -204,27 +222,30 @@
       </div>
     </div>
 
-    <!-- RODAPÉ: DADOS DO PRODUTO (ESQUERDA) + LISTAGEM DE CAIXAS (DIREITA) -->
-    <div class="pallet-footer">
-      <!-- Coluna Esquerda -->
-      <div class="footer-left">
-        <div class="model-name" id="model-val">ZXHN F6600P</div>
-        <div class="region-date" id="region-date-val">FELIZ/RS – 18/08/2026 15:25:25</div>
-        <div class="units-count" id="units-count-val">400 UNIDADES</div>
+    <!-- GRID CENTRALIZADO (OPÇÃO A) -->
+    <div class="content-grid">
+      <!-- CARTÃO ESQUERDO -->
+      <div class="card-lote">
+        <div class="data-group">
+          <div class="data-label">Modelo do Equipamento:</div>
+          <div class="data-value-model" id="model-val">EG8041X6-10</div>
+        </div>
+        <div class="data-group">
+          <div class="data-label">Regional / Data e Hora:</div>
+          <div class="data-value-region" id="region-val">SANTANA DE PARNAIBA/SP</div>
+          <div style="font-size: 13pt; font-weight: 700; color: #333; margin-top: 2px;" id="date-val">21/08/2026 09:41:10</div>
+        </div>
+        <div class="data-group">
+          <div class="data-label">Total de Unidades:</div>
+          <div class="data-value-units" id="units-count-val">10 UNIDADES</div>
+        </div>
       </div>
 
-      <!-- Coluna Direita -->
-      <div class="footer-right">
-        <div class="boxes-title">NUMERO DAS CAIXAS</div>
-        <div class="boxes-list" id="boxes-list-val">
-C000000001 / C000000002 / C000000003 / C000000004 / C000000005
-C000000006 / C000000007 / C000000008 / C000000009 / C000000010
-C000000011 / C000000012 / C000000013 / C000000014 / C000000015
-C000000016 / C000000017 / C000000018 / C000000019 / C000000020
-C000000021 / C000000022 / C000000023 / C000000024 / C000000025
-C000000026 / C000000027 / C000000028 / C000000029 / C000000030
-C000000031 / C000000032 / C000000033 / C000000034 / C000000035
-C000000036 / C000000037 / C000000038 / C000000039 / C000000040
+      <!-- CARTÃO DIREITO -->
+      <div class="card-caixas">
+        <div class="caixas-header">Número das Caixas (1)</div>
+        <div class="caixas-grid" id="boxes-grid">
+          <div class="box-chip">C000000003</div>
         </div>
       </div>
     </div>
@@ -234,8 +255,8 @@ C000000036 / C000000037 / C000000038 / C000000039 / C000000040
     function renderBarcode(code) {
       JsBarcode("#barcode", code, {
         format: "CODE128",
-        width: 3.5,
-        height: 70,
+        width: 3.8,
+        height: 75,
         displayValue: false,
         margin: 0
       });
