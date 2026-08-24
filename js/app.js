@@ -3602,6 +3602,9 @@ async function fecharPallet(palletId) {
   updatePalletSummary();
   carregarListaTodosPallets();
 
+  // Imprimir automaticamente a Folha A4 do Pallet fechado
+  imprimirFolhaA4Pallet(palletId);
+
   // Iniciar próximo pallet automaticamente
   await generateNewPalletCode();
 }
@@ -6430,6 +6433,9 @@ async function fecharPalletSucata(palletId) {
   showToast(`Pallet de Sucata ${palletId} fechado com sucesso!`);
   updatePalletSucataSummary();
   carregarListaTodosPalletsSucata();
+
+  // Imprimir automaticamente a Folha A4 do Pallet de Sucata fechado
+  imprimirFolhaA4PalletSucata(palletId);
 
   await generateNewPalletSucataCode();
 }
