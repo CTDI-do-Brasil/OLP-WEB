@@ -3823,6 +3823,55 @@ function imprimirFolhaA4PalletAtual() {
   imprimirFolhaA4Pallet(palletId);
 }
 
+function generateCode128SvgHtml(text, height = 70, scale = 3.2) {
+  const patterns = [
+    '11011001100','11001101100','11001100110','10010011000','10010001100','10001001100','10011001000','10011000100','10001100100','11001001000',
+    '11001000100','11000100100','10110011100','10011011100','10011001110','10111001100','10011101100','10011100110','11001110010','11001011100',
+    '11001001110','11011100100','11001110100','11101101110','11101001100','11100101100','11100100110','11101100100','11100110100','11100110010',
+    '11011011000','11011000110','11000110110','10100011000','10001011000','10001000110','10110001000','10001101000','10001100010','11010001000',
+    '11000101000','11000100010','10110111000','10110001110','10001101110','10111011000','10111000110','10001110110','11101110110','11010001110',
+    '11000101110','11011101000','11011100010','11011101110','11101011000','11101000110','11100010110','11101101000','11101100010','11100011010',
+    '11101111010','11001000010','11110001010','10100110000','10100001100','10010110000','10010000110','10000101100','10000100110','10110010000',
+    '10110000100','10011010000','10011000010','10000110100','10000110010','11000010010','11001010000','11110111010','11000010100','10001111010',
+    '10100111100','10010111100','10010011110','10111100100','10011110100','10011110010','11110100100','11110010100','11110010010','11011011110',
+    '11011110110','11110110110','10101111000','10100011110','10001011110','10111101000','10111100010','11110101000','11110100010','10111011110',
+    '10111101110','11101011110','11110101110','11010000100','11010010000','11010011100','1100011101011'
+  ];
+
+  const START_B = 104;
+  const STOP = 106;
+  const str = String(text || '').trim();
+
+  let checksum = START_B;
+  let bitString = patterns[START_B];
+
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i) - 32;
+    if (code >= 0 && code < patterns.length) {
+      checksum += code * (i + 1);
+      bitString += patterns[code];
+    }
+  }
+
+  const checkCode = checksum % 103;
+  bitString += patterns[checkCode];
+  bitString += patterns[STOP];
+
+  const width = bitString.length * scale;
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`;
+  svg += `<rect width="100%" height="100%" fill="#fff"/>`;
+
+  let posX = 0;
+  for (let i = 0; i < bitString.length; i++) {
+    if (bitString[i] === '1') {
+      svg += `<rect x="${posX}" y="0" width="${scale}" height="${height}" fill="#000"/>`;
+    }
+    posX += scale;
+  }
+  svg += `</svg>`;
+  return svg;
+}
+
 function imprimirFolhaA4Pallet(palletId) {
   if (!palletId) {
     alert("Pallet não selecionado!");
@@ -3830,7 +3879,7 @@ function imprimirFolhaA4Pallet(palletId) {
   }
 
   const caixas = obterCaixasDoPallet(palletId);
-  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === String(palletId).trim().toUpperCase());
 
   if (caixas.length === 0 || unitsInPallet.length === 0) {
     playErrorBeep();
@@ -3858,12 +3907,15 @@ function imprimirFolhaA4Pallet(palletId) {
   // 4. Quantidade de Unidades: cálculo dinâmico
   const totalUnidades = unitsInPallet.length;
 
-  // 5. Matriz de Caixas: formatação em grid de chips/tabela limpa
+  // 5. Matriz de Caixas: formatação em grid de 4 colunas para caber até 40 caixas com clareza
   const caixasHtml = caixas.map(c => `
     <div class="box-chip">${c.caixaId}</div>
   `).join('');
 
-  // Gerar e abrir a janela de impressão A4 com estilos e renderizador de código de barras
+  // 6. Geração direta do código de barras vetorial SVG (100% offline e imediato)
+  const barcodeSvgHtml = generateCode128SvgHtml(palletId, 68, 3.2);
+
+  // Gerar e abrir a janela de impressão A4
   const printWindow = window.open('', '_blank', 'width=1100,height=850');
   if (!printWindow) {
     alert("Por favor, permita pop-ups no navegador para abrir a folha de impressão!");
@@ -3876,7 +3928,6 @@ function imprimirFolhaA4Pallet(palletId) {
 <head>
   <meta charset="UTF-8">
   <title>Identificação do Pallet - ${palletId}</title>
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"><\/script>
   <style>
     * {
       box-sizing: border-box;
@@ -3915,7 +3966,7 @@ function imprimirFolhaA4Pallet(palletId) {
       width: 297mm;
       height: 200mm;
       background: white;
-      padding: 10mm 15mm;
+      padding: 8mm 14mm;
       position: relative;
       display: flex;
       flex-direction: column;
@@ -3924,46 +3975,49 @@ function imprimirFolhaA4Pallet(palletId) {
     }
     .header-logo {
       position: absolute;
-      top: 10mm;
-      right: 15mm;
+      top: 8mm;
+      right: 14mm;
     }
     .header-logo img {
-      height: 44px;
+      height: 42px;
       width: auto;
     }
     .pallet-header {
       text-align: center;
-      margin-top: 2mm;
-      margin-bottom: 8mm;
+      margin-top: 1mm;
+      margin-bottom: 5mm;
     }
     .pallet-title {
-      font-size: 38pt;
+      font-size: 34pt;
       font-weight: 900;
       letter-spacing: 2px;
       color: #000;
       line-height: 1;
     }
     .pallet-code {
-      font-size: 58pt;
+      font-size: 52pt;
       font-weight: 900;
-      letter-spacing: 4px;
+      letter-spacing: 3px;
       color: #000;
-      margin: 4px 0 6px 0;
+      margin: 2px 0 4px 0;
       line-height: 1;
     }
     .barcode-container {
-      text-align: center;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 4px;
     }
     .barcode-container svg {
-      width: 480px;
-      height: 80px;
+      max-width: 520px;
+      height: 68px;
     }
     
     /* GRID CENTRALIZADO (OPÇÃO A) */
     .content-grid {
       display: flex;
-      gap: 15mm;
-      margin-top: 4mm;
+      gap: 12mm;
+      margin-top: 2mm;
       flex: 1;
     }
     
@@ -3972,84 +4026,84 @@ function imprimirFolhaA4Pallet(palletId) {
       flex: 1;
       border: 2.5px solid #000;
       border-radius: 10px;
-      padding: 16px 20px;
+      padding: 14px 18px;
       display: flex;
       flex-direction: column;
       justify-content: space-around;
       background: #fdfdfd;
     }
     .data-group {
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .data-group:last-child {
       margin-bottom: 0;
     }
     .data-label {
-      font-size: 11pt;
+      font-size: 10.5pt;
       font-weight: 800;
       color: #555;
       text-transform: uppercase;
-      margin-bottom: 3px;
+      margin-bottom: 2px;
       letter-spacing: 1px;
     }
     .data-value-model {
-      font-size: 24pt;
+      font-size: 22pt;
       font-weight: 900;
       color: #000;
       line-height: 1.1;
     }
     .data-value-region {
-      font-size: 17pt;
+      font-size: 16pt;
       font-weight: 800;
       color: #000;
       line-height: 1.2;
     }
     .data-value-units {
-      font-size: 26pt;
+      font-size: 24pt;
       font-weight: 900;
       color: #000;
       letter-spacing: 1px;
     }
     
-    /* CARTÃO DIREITO: NÚMERO DAS CAIXAS */
+    /* CARTÃO DIREITO: NÚMERO DAS CAIXAS (40 CAIXAS EM 4 COLUNAS) */
     .card-caixas {
-      flex: 1.4;
+      flex: 1.6;
       border: 2.5px solid #000;
       border-radius: 10px;
-      padding: 16px 18px;
+      padding: 12px 14px;
       display: flex;
       flex-direction: column;
       background: #fdfdfd;
     }
     .caixas-header {
-      font-size: 18pt;
+      font-size: 16pt;
       font-weight: 900;
       color: #000;
       text-align: center;
-      margin-bottom: 12px;
-      padding-bottom: 6px;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
       border-bottom: 2px solid #000;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
     .caixas-grid {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-content: flex-start;
-      max-height: 75mm;
-      overflow: hidden;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3px 5px;
+      width: 100%;
     }
     .box-chip {
       font-family: 'Courier New', Courier, monospace;
-      font-size: 12.5pt;
+      font-size: 9.5pt;
       font-weight: 900;
       color: #000;
-      background: #eee;
-      border: 1.5px solid #333;
-      border-radius: 4px;
-      padding: 4px 8px;
-      letter-spacing: 0.5px;
+      background: #f8fafc;
+      border: 1.2px solid #000;
+      border-radius: 3px;
+      padding: 2.5px 2px;
+      text-align: center;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
     }
     
     @media print {
@@ -4068,7 +4122,7 @@ function imprimirFolhaA4Pallet(palletId) {
         width: 100vw;
         height: 100vh;
         box-shadow: none;
-        padding: 10mm 15mm;
+        padding: 8mm 14mm;
         page-break-after: avoid;
       }
     }
@@ -4090,7 +4144,7 @@ function imprimirFolhaA4Pallet(palletId) {
       <div class="pallet-title">PALLET #</div>
       <div class="pallet-code">${palletId}</div>
       <div class="barcode-container">
-        <svg id="barcode"></svg>
+        ${barcodeSvgHtml}
       </div>
     </div>
 
@@ -4105,7 +4159,7 @@ function imprimirFolhaA4Pallet(palletId) {
         <div class="data-group">
           <div class="data-label">Regional / Data e Hora:</div>
           <div class="data-value-region">${regional}</div>
-          <div style="font-size: 13pt; font-weight: 700; color: #333; margin-top: 2px;">${dataHoraFormatada}</div>
+          <div style="font-size: 12pt; font-weight: 700; color: #333; margin-top: 2px;">${dataHoraFormatada}</div>
         </div>
         <div class="data-group">
           <div class="data-label">Total de Unidades:</div>
@@ -4125,20 +4179,9 @@ function imprimirFolhaA4Pallet(palletId) {
 
   <script>
     window.addEventListener('load', () => {
-      try {
-        JsBarcode("#barcode", "${palletId}", {
-          format: "CODE128",
-          width: 3.8,
-          height: 75,
-          displayValue: false,
-          margin: 0
-        });
-      } catch(e) {
-        console.error("Erro ao gerar barcode:", e);
-      }
       setTimeout(() => {
         window.print();
-      }, 500);
+      }, 400);
     });
   <\/script>
 </body>
