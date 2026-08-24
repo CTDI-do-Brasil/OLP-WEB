@@ -55,57 +55,85 @@ if (document.readyState === 'loading') {
 
 async function loadStateFromServer() {
   try {
-    const [usersRes, modelsRes, locationsRes, unitsRes, defectsRes, printersRes, caixasRes] = await Promise.all([
-      fetch('/api/users'),
-      fetch('/api/models'),
-      fetch('/api/locations'),
-      fetch('/api/units'),
-      fetch('/api/defect-codes'),
-      fetch('/api/printers'),
-      fetch('/api/caixas')
-    ]);
-
-    if (!usersRes.ok || !modelsRes.ok || !locationsRes.ok || !unitsRes.ok || !defectsRes.ok) {
-      throw new Error("HTTP error retrieving state");
+    const unitsRes = await fetch('/api/units');
+    if (unitsRes.ok) {
+      const serverUnits = await unitsRes.json();
+      if (Array.isArray(serverUnits)) {
+        appState.units = serverUnits;
+        saveStateToStorage();
+      }
     }
-
-    appState.users = await usersRes.json();
-    appState.models = await modelsRes.json();
-    appState.locations = await locationsRes.json();
-    appState.units = await unitsRes.json();
-    appState.defectCodes = await defectsRes.json();
-    appState.printers = printersRes.ok ? await printersRes.json() : [];
-    appState.caixas = caixasRes.ok ? await caixasRes.json() : [];
   } catch (e) {
-    console.warn("Erro ao carregar dados do servidor, utilizando fallback local:", e);
-    appState.defectCodes = [];
-    appState.printers = [];
-    appState.caixas = [];
-    // Fallback locally
-    try {
-      const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
-      appState.users = (usersData && usersData !== 'undefined' && usersData !== 'null') ? JSON.parse(usersData) : getSeedUsers();
-    } catch (err) {
-      appState.users = getSeedUsers();
-    }
-    try {
-      const modelsData = localStorage.getItem(STORAGE_KEYS.MODELS);
-      appState.models = (modelsData && modelsData !== 'undefined' && modelsData !== 'null') ? JSON.parse(modelsData) : getSeedModels();
-    } catch (err) {
-      appState.models = getSeedModels();
-    }
-    try {
-      const locationsData = localStorage.getItem(STORAGE_KEYS.LOCATIONS);
-      appState.locations = (locationsData && locationsData !== 'undefined' && locationsData !== 'null') ? JSON.parse(locationsData) : getSeedLocations();
-    } catch (err) {
-      appState.locations = getSeedLocations();
-    }
+    console.warn("Erro ao buscar units do servidor, utilizando fallback local:", e);
     try {
       const unitsData = localStorage.getItem(STORAGE_KEYS.UNITS);
       appState.units = (unitsData && unitsData !== 'undefined' && unitsData !== 'null') ? JSON.parse(unitsData) : getSeedUnits();
     } catch (err) {
       appState.units = getSeedUnits();
     }
+  }
+
+  try {
+    const usersRes = await fetch('/api/users');
+    if (usersRes.ok) {
+      appState.users = await usersRes.json();
+    }
+  } catch (e) {
+    try {
+      const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
+      appState.users = (usersData && usersData !== 'undefined' && usersData !== 'null') ? JSON.parse(usersData) : getSeedUsers();
+    } catch (err) {
+      appState.users = getSeedUsers();
+    }
+  }
+
+  try {
+    const modelsRes = await fetch('/api/models');
+    if (modelsRes.ok) {
+      appState.models = await modelsRes.json();
+    }
+  } catch (e) {
+    try {
+      const modelsData = localStorage.getItem(STORAGE_KEYS.MODELS);
+      appState.models = (modelsData && modelsData !== 'undefined' && modelsData !== 'null') ? JSON.parse(modelsData) : getSeedModels();
+    } catch (err) {
+      appState.models = getSeedModels();
+    }
+  }
+
+  try {
+    const locationsRes = await fetch('/api/locations');
+    if (locationsRes.ok) {
+      appState.locations = await locationsRes.json();
+    }
+  } catch (e) {
+    try {
+      const locationsData = localStorage.getItem(STORAGE_KEYS.LOCATIONS);
+      appState.locations = (locationsData && locationsData !== 'undefined' && locationsData !== 'null') ? JSON.parse(locationsData) : getSeedLocations();
+    } catch (err) {
+      appState.locations = getSeedLocations();
+    }
+  }
+
+  try {
+    const defectsRes = await fetch('/api/defect-codes');
+    appState.defectCodes = defectsRes.ok ? await defectsRes.json() : [];
+  } catch (e) {
+    appState.defectCodes = [];
+  }
+
+  try {
+    const printersRes = await fetch('/api/printers');
+    appState.printers = printersRes.ok ? await printersRes.json() : [];
+  } catch (e) {
+    appState.printers = [];
+  }
+
+  try {
+    const caixasRes = await fetch('/api/caixas');
+    appState.caixas = caixasRes.ok ? await caixasRes.json() : [];
+  } catch (e) {
+    appState.caixas = [];
   }
 }
 
@@ -3202,7 +3230,17 @@ async function generateNextPalletCodeFromServer() {
   }
 }
 
+async function sincronizarPalletManualmente() {
+  showToast("Sincronizando dados com o servidor...");
+  await loadStateFromServer();
+  updatePalletSummary();
+  carregarListaTodosPallets();
+  showToast("Dados do Pallet atualizados com sucesso!");
+  playSuccessBeep();
+}
+
 async function initPalletView() {
+  await loadStateFromServer();
   const codeField = document.getElementById('pallet-code-id');
   if (codeField) {
     if (!codeField.value) {

@@ -1211,6 +1211,9 @@
                   <div class="flex-between">
                     <h4><i class="fa-solid fa-boxes-stacked"></i> Resumo do Pallet Atual</h4>
                     <div class="flex-row" style="gap: 6px;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="sincronizarPalletManualmente()" title="Recarregar Caixas e Unidades do Servidor">
+                        <i class="fa-solid fa-rotate"></i> Atualizar
+                      </button>
                       <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletAtual()" title="Imprimir Folha A4 de Identificação do Pallet">
                         <i class="fa-solid fa-print"></i> Imprimir
                       </button>
@@ -1860,7 +1863,7 @@
   <script src="js/audio.js"></script>
   <script src="js/models.js"></script>
   <script src="js/excel.js"></script>
-  <script src="js/app.js?v=2.7"></script>
+  <script src="js/app.js?v=2.8"></script>
 
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toast-container" class="toast-container"></div>
