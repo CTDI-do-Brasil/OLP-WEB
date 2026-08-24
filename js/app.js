@@ -3718,8 +3718,8 @@ function carregarListaTodosPallets() {
         <td>${statusBadge}</td>
         <td>${p.data}</td>
         <td style="text-align: center;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4Pallet('${p.palletId}')" title="Imprimir Folha A4 deste Pallet">
-            <i class="fa-solid fa-print"></i> A4
+          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4Pallet('${p.palletId}')" title="Reimprimir Folha A4 deste Pallet">
+            <i class="fa-solid fa-print"></i> Reimprimir
           </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="selecionarPalletParaAjuste('${p.palletId}')" title="Consultar e Ajustar Pallet" style="margin-left: 4px;">
             <i class="fa-solid fa-pen-to-square"></i>
@@ -6789,8 +6789,8 @@ function carregarListaTodosPalletsSucata() {
         <td>${statusBadge}</td>
         <td>${p.data}</td>
         <td style="text-align: center;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletSucata('${p.palletId}')" title="Imprimir Folha A4 deste Pallet de Sucata">
-            <i class="fa-solid fa-print"></i> A4
+          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletSucata('${p.palletId}')" title="Reimprimir Folha A4 deste Pallet de Sucata">
+            <i class="fa-solid fa-print"></i> Reimprimir
           </button>
         </td>
       </tr>
