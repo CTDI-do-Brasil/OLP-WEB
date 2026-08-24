@@ -3722,7 +3722,7 @@ function carregarListaTodosPallets() {
             <i class="fa-solid fa-print"></i> Reimprimir
           </button>
           <button type="button" class="btn btn-secondary btn-sm" onclick="selecionarPalletParaAjuste('${p.palletId}')" title="Consultar e Ajustar Pallet" style="margin-left: 4px;">
-            <i class="fa-solid fa-pen-to-square"></i>
+            <i class="fa-solid fa-pen-to-square"></i> Editar
           </button>
           <button type="button" class="btn btn-danger btn-sm" onclick="excluirPalletDireto('${p.palletId}')" title="Excluir Pallet" style="margin-left: 4px;">
             <i class="fa-solid fa-trash-can"></i>
