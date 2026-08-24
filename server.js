@@ -70,6 +70,26 @@ async function initDbConnection() {
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS historico JSONB DEFAULT \'[]\'::jsonb');
     await pool.query('ALTER TABLE printers ADD COLUMN IF NOT EXISTS dpi INTEGER DEFAULT 300');
     
+    // Ensure caixas table exists with all required fields
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS caixas (
+        id VARCHAR(100) PRIMARY KEY,
+        modelo VARCHAR(100),
+        fabricante VARCHAR(100),
+        localidade VARCHAR(100),
+        operador VARCHAR(100),
+        data_criacao VARCHAR(100),
+        data_fechamento VARCHAR(100),
+        status VARCHAR(50) DEFAULT 'ABERTA',
+        quantidade INTEGER DEFAULT 0,
+        pallet_id VARCHAR(100),
+        gpon_ids JSONB DEFAULT '[]'::jsonb,
+        unidades JSONB DEFAULT '[]'::jsonb
+      )
+    `);
+    await pool.query('ALTER TABLE caixas ADD COLUMN IF NOT EXISTS gpon_ids JSONB DEFAULT \'[]\'::jsonb');
+    await pool.query('ALTER TABLE caixas ADD COLUMN IF NOT EXISTS unidades JSONB DEFAULT \'[]\'::jsonb');
+    
     // Create sequence generators table for atomic sequences (concurrent safety)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sequence_generators (
@@ -734,7 +754,187 @@ app.post('/api/sequence/caixa/next', async (req, res) => {
   }
 });
 
+// CAIXAS (BOXES) ENDPOINTS
+app.get('/api/caixas', async (req, res) => {
+  const { pallet_id, status, modelo } = req.query;
+  try {
+    let query = 'SELECT * FROM caixas';
+    const conditions = [];
+    const params = [];
+
+    if (pallet_id) {
+      params.push(pallet_id);
+      conditions.push(`pallet_id = $${params.length}`);
+    }
+    if (status) {
+      params.push(status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (modelo) {
+      params.push(modelo);
+      conditions.push(`modelo = $${params.length}`);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    query += ' ORDER BY id DESC';
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/caixas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query('SELECT * FROM caixas WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Caixa não encontrada!' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/caixas', async (req, res) => {
+  const {
+    id,
+    modelo,
+    fabricante,
+    localidade,
+    operador,
+    dataCriacao,
+    dataFechamento,
+    status,
+    quantidade,
+    palletId,
+    gponIds,
+    unidades
+  } = req.body;
+
+  try {
+    const gponJson = JSON.stringify(gponIds || []);
+    const unidadesJson = JSON.stringify(unidades || []);
+
+    await pool.query(
+      `INSERT INTO caixas (id, modelo, fabricante, localidade, operador, data_criacao, data_fechamento, status, quantidade, pallet_id, gpon_ids, unidades)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ON CONFLICT (id) DO UPDATE SET
+         modelo = COALESCE(EXCLUDED.modelo, caixas.modelo),
+         fabricante = COALESCE(EXCLUDED.fabricante, caixas.fabricante),
+         localidade = COALESCE(EXCLUDED.localidade, caixas.localidade),
+         operador = COALESCE(EXCLUDED.operador, caixas.operador),
+         data_criacao = COALESCE(EXCLUDED.data_criacao, caixas.data_criacao),
+         data_fechamento = COALESCE(EXCLUDED.data_fechamento, caixas.data_fechamento),
+         status = COALESCE(EXCLUDED.status, caixas.status),
+         quantidade = COALESCE(EXCLUDED.quantidade, caixas.quantidade),
+         pallet_id = COALESCE(EXCLUDED.pallet_id, caixas.pallet_id),
+         gpon_ids = COALESCE(EXCLUDED.gpon_ids, caixas.gpon_ids),
+         unidades = COALESCE(EXCLUDED.unidades, caixas.unidades)`,
+      [
+        id,
+        modelo || null,
+        fabricante || null,
+        localidade || null,
+        operador || null,
+        dataCriacao || null,
+        dataFechamento || null,
+        status || 'ABERTA',
+        parseInt(quantidade) || 0,
+        palletId || null,
+        gponJson,
+        unidadesJson
+      ]
+    );
+
+    res.status(201).json({ success: true, message: 'Caixa registrada com sucesso!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/caixas/:id', async (req, res) => {
+  const { id } = req.params;
+  const body = req.body;
+  try {
+    const fields = [];
+    const values = [];
+
+    if (Object.prototype.hasOwnProperty.call(body, 'modelo')) {
+      values.push(body.modelo);
+      fields.push(`modelo = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'fabricante')) {
+      values.push(body.fabricante);
+      fields.push(`fabricante = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'localidade')) {
+      values.push(body.localidade);
+      fields.push(`localidade = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'operador')) {
+      values.push(body.operador);
+      fields.push(`operador = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'dataCriacao')) {
+      values.push(body.dataCriacao);
+      fields.push(`data_criacao = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'dataFechamento')) {
+      values.push(body.dataFechamento);
+      fields.push(`data_fechamento = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      values.push(body.status);
+      fields.push(`status = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'quantidade')) {
+      values.push(parseInt(body.quantidade) || 0);
+      fields.push(`quantidade = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'palletId')) {
+      values.push(body.palletId);
+      fields.push(`pallet_id = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'gponIds')) {
+      values.push(body.gponIds ? JSON.stringify(body.gponIds) : '[]');
+      fields.push(`gpon_ids = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'unidades')) {
+      values.push(body.unidades ? JSON.stringify(body.unidades) : '[]');
+      fields.push(`unidades = $${values.length}`);
+    }
+
+    if (fields.length === 0) {
+      return res.json({ success: true, message: 'Nenhum campo para atualizar.' });
+    }
+
+    values.push(id);
+    const sql = `UPDATE caixas SET ${fields.join(', ')} WHERE id = $${values.length}`;
+    await pool.query(sql, values);
+
+    res.json({ success: true, message: 'Caixa atualizada com sucesso!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/caixas/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('DELETE FROM caixas WHERE id = $1', [id]);
+    res.json({ success: true, message: 'Caixa removida do banco de dados!' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // STARTUP
+
 initDbConnection().then(() => {
   app.listen(PORT, () => {
     console.log(`[Server] Servidor rodando com sucesso no endereço: http://localhost:${PORT}`);

@@ -66,5 +66,18 @@ CREATE TABLE IF NOT EXISTS printers (
   status VARCHAR(50) NOT NULL DEFAULT 'ATIVA'
 );
 
-
-
+-- 7. Caixas (Boxes) Table
+CREATE TABLE IF NOT EXISTS caixas (
+  id VARCHAR(100) PRIMARY KEY,
+  modelo VARCHAR(100),
+  fabricante VARCHAR(100),
+  localidade VARCHAR(100),
+  operador VARCHAR(100),
+  data_criacao VARCHAR(100),
+  data_fechamento VARCHAR(100),
+  status VARCHAR(50) DEFAULT 'ABERTA',
+  quantidade INTEGER DEFAULT 0,
+  pallet_id VARCHAR(100),
+  gpon_ids JSONB DEFAULT '[]'::jsonb,
+  unidades JSONB DEFAULT '[]'::jsonb
+);

@@ -19,6 +19,7 @@ let appState = {
   models: [],
   locations: [],
   units: [],
+  caixas: [],
   defectCodes: [],
   printers: [],
   currentRecebimentoSession: [],
@@ -54,13 +55,14 @@ if (document.readyState === 'loading') {
 
 async function loadStateFromServer() {
   try {
-    const [usersRes, modelsRes, locationsRes, unitsRes, defectsRes, printersRes] = await Promise.all([
+    const [usersRes, modelsRes, locationsRes, unitsRes, defectsRes, printersRes, caixasRes] = await Promise.all([
       fetch('/api/users'),
       fetch('/api/models'),
       fetch('/api/locations'),
       fetch('/api/units'),
       fetch('/api/defect-codes'),
-      fetch('/api/printers')
+      fetch('/api/printers'),
+      fetch('/api/caixas')
     ]);
 
     if (!usersRes.ok || !modelsRes.ok || !locationsRes.ok || !unitsRes.ok || !defectsRes.ok) {
@@ -73,10 +75,12 @@ async function loadStateFromServer() {
     appState.units = await unitsRes.json();
     appState.defectCodes = await defectsRes.json();
     appState.printers = printersRes.ok ? await printersRes.json() : [];
+    appState.caixas = caixasRes.ok ? await caixasRes.json() : [];
   } catch (e) {
     console.warn("Erro ao carregar dados do servidor, utilizando fallback local:", e);
     appState.defectCodes = [];
     appState.printers = [];
+    appState.caixas = [];
     // Fallback locally
     try {
       const usersData = localStorage.getItem(STORAGE_KEYS.USERS);
@@ -2836,6 +2840,63 @@ async function imprimirZplDiretoImpressora() {
   }
 }
 
+// Sincronização e persistência estruturada de Caixas e GPON IDs no Banco de Dados
+async function syncCaixaWithServer(caixaId) {
+  if (!caixaId) return;
+  try {
+    const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+    if (boxUnits.length === 0) {
+      await fetch(`/api/caixas/${caixaId}`, { method: 'DELETE' }).catch(() => {});
+      return;
+    }
+
+    const firstUnit = boxUnits[0];
+    const isFechada = boxUnits.length >= 10 || boxUnits.every(u => u.embalagem && u.embalagem.fechada);
+    const palletId = (firstUnit.pallet && firstUnit.pallet.palletId) ? firstUnit.pallet.palletId : null;
+    
+    // Mapeamento de todos os GPON IDs das unidades da caixa
+    const gponIds = boxUnits.map(u => u.gpon).filter(g => !!g && g.trim() !== '');
+    
+    const unidadesDetalhes = boxUnits.map(u => ({
+      id: u.id,
+      serial: u.serial,
+      gpon: u.gpon || '',
+      mac: u.mac || '',
+      modelo: u.modelo,
+      fabricante: u.fabricante,
+      localidade: u.localidade,
+      data: u.embalagem ? u.embalagem.data : '',
+      operador: u.embalagem ? u.embalagem.operador : ''
+    }));
+
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+    const payload = {
+      id: caixaId,
+      modelo: firstUnit.modelo || '',
+      fabricante: firstUnit.fabricante || '',
+      localidade: firstUnit.localidade || '',
+      operador: (firstUnit.embalagem && firstUnit.embalagem.operador) ? firstUnit.embalagem.operador : (appState.currentUser ? appState.currentUser.login : 'OPERADOR'),
+      dataCriacao: (firstUnit.embalagem && firstUnit.embalagem.data) ? firstUnit.embalagem.data : dateStr,
+      dataFechamento: isFechada ? dateStr : null,
+      status: isFechada ? 'FECHADA' : 'ABERTA',
+      quantidade: boxUnits.length,
+      palletId: palletId,
+      gponIds: gponIds,
+      unidades: unidadesDetalhes
+    };
+
+    await fetch('/api/caixas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.warn("Erro ao sincronizar caixa e GPON IDs com o servidor:", err);
+  }
+}
+
 // Conjunto para controlar caixas já fechadas/impressas
 let caixasImpressasSet = new Set();
 
@@ -2929,6 +2990,9 @@ async function fecharCaixaEmbalagem(caixaId) {
     }
   }
 
+  // Sincroniza informações da caixa fechada e GPON IDs no banco de dados
+  syncCaixaWithServer(caixaId);
+
   // Exibe a etiqueta ZPL gerada e envia apenas 1 cópia para a impressora
   showZplModal(caixaId, modelo, boxUnits);
   playSuccessBeep();
@@ -2948,6 +3012,7 @@ async function fecharCaixaEmbalagem(caixaId) {
   await generateNewCaixaCode();
   showToast(`Caixa ${caixaId} fechada e etiqueta única impressa! Nova caixa iniciada.`);
 }
+
 
 /**
  * Validação de Regras Obrigatórias para Embalagem:
@@ -3089,9 +3154,13 @@ async function executarEmbalarUnidadeItem(serial, caixaId) {
     }).catch(err => {
       console.error("Erro ao persistir embalagem no servidor:", err);
     });
+
+    // Sincroniza informações da caixa e GPON IDs no banco de dados
+    syncCaixaWithServer(caixaId);
   } catch (err) {
     console.error("Erro de requisição:", err);
   }
+
 
   // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades na caixa
   if (updatedBoxUnits.length >= 10) {
@@ -3368,7 +3437,9 @@ async function executarPalletCaixaItem(inputVal, palletId) {
           historico: u.historico
         })
       })
-    )).catch(err => {
+    )).then(() => {
+      syncCaixaWithServer(targetCaixaId);
+    }).catch(err => {
       console.error("Erro ao persistir palletização no servidor:", err);
     });
   } catch (err) {
@@ -3480,6 +3551,9 @@ async function removerCaixaDoPalletDireto(palletId, caixaId) {
 
     saveStateToStorage();
 
+    // Sincroniza remoção de pallet da caixa no banco de dados
+    syncCaixaWithServer(caixaId);
+
     playSuccessBeep();
     showToast(`Caixa ${caixaId} removida do Pallet ${palletId} com sucesso!`);
     updatePalletSummary();
@@ -3492,6 +3566,7 @@ async function removerCaixaDoPalletDireto(palletId, caixaId) {
     alert("Erro ao remover caixa do pallet no servidor!");
   }
 }
+
 
 /* ==========================================================================
    CONSULTA & AJUSTES DE PALLETS
@@ -4405,6 +4480,9 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
     unit.status = 'EMBALADO';
     saveStateToStorage();
 
+    // Sincroniza informações da caixa e GPON IDs no banco de dados
+    syncCaixaWithServer(currentAjusteCaixaId);
+
     serialInput.value = '';
     playSuccessBeep();
     showToast(`Unidade ${unit.serial} adicionada à caixa ${currentAjusteCaixaId} com sucesso!`);
@@ -4462,6 +4540,9 @@ async function removerUnidadeDaCaixaAjuste(unitId, serial) {
     unit.embalagem = null;
     unit.status = novoStatus;
     saveStateToStorage();
+
+    // Sincroniza caixa atualizada no banco de dados
+    syncCaixaWithServer(caixaRemovidaId);
 
     playSuccessBeep();
     showToast(`Unidade ${serial} removida da caixa com sucesso!`);
@@ -4526,6 +4607,9 @@ async function excluirCaixaDireto(caixaId) {
 
     saveStateToStorage();
 
+    // Sincroniza/remove caixa no banco de dados
+    syncCaixaWithServer(caixaId);
+
     playSuccessBeep();
     showToast(`Caixa ${caixaId} excluída com sucesso! ${boxUnits.length} unidade(s) liberadas.`);
 
@@ -4538,6 +4622,7 @@ async function excluirCaixaDireto(caixaId) {
     alert("Erro ao excluir caixa no servidor!");
   }
 }
+
 
 function reimprimirEtiquetaCaixaAtualAjuste() {
   if (!currentAjusteCaixaId) return;
