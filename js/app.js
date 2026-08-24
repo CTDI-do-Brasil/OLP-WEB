@@ -3222,8 +3222,6 @@ async function generateNewPalletCode() {
 
   const currentPalletId = codeField.value.trim().toUpperCase();
   const currentPalletUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === currentPalletId);
-
-  // Se o pallet atual não tem caixas, avisa
   if (currentPalletId && currentPalletUnits.length === 0) {
     showToast(`O Pallet ${currentPalletId} já é um pallet novo sem caixas associadas.`);
     return;
@@ -3244,11 +3242,13 @@ async function generateNewPalletCode() {
  * Obtém a lista de caixas agrupadas dentro de um Pallet
  */
 function obterCaixasDoPallet(palletId) {
-  const unitsInPallet = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId);
+  if (!palletId) return [];
+  const normalizedPalletId = String(palletId).trim().toUpperCase();
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === normalizedPalletId);
   const caixasMap = {};
 
   unitsInPallet.forEach(u => {
-    const cId = (u.embalagem && u.embalagem.caixaId) ? u.embalagem.caixaId : 'SEM_CAIXA';
+    const cId = (u.embalagem && u.embalagem.caixaId) ? String(u.embalagem.caixaId).trim().toUpperCase() : 'SEM_CAIXA';
     if (!caixasMap[cId]) {
       caixasMap[cId] = {
         caixaId: cId,
@@ -3269,13 +3269,17 @@ function updatePalletSummary() {
   if (!codeField) return;
   const palletId = codeField.value.trim().toUpperCase() || 'P000000001';
 
-  document.getElementById('pallet-stat-code').innerText = palletId;
+  const statCodeEl = document.getElementById('pallet-stat-code');
+  if (statCodeEl) statCodeEl.innerText = palletId;
 
   const caixas = obterCaixasDoPallet(palletId);
-  const totalUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === palletId).length;
+  const totalUnits = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === palletId).length;
 
-  document.getElementById('pallet-stat-count').innerText = `${caixas.length} / 40 Caixas`;
-  document.getElementById('pallet-stat-total-unidades').innerText = `${totalUnits} Unidades`;
+  const statCountEl = document.getElementById('pallet-stat-count');
+  if (statCountEl) statCountEl.innerText = `${caixas.length} / 40 Caixas`;
+
+  const statUnitsEl = document.getElementById('pallet-stat-total-unidades');
+  if (statUnitsEl) statUnitsEl.innerText = `${totalUnits} Unidades`;
 
   const isFechado = caixas.length >= 40 || palletsFechadosSet.has(palletId) || (caixas.length > 0 && caixas.every(c => c.unidades.every(u => u.pallet && u.pallet.fechado)));
   const statusEl = document.getElementById('pallet-stat-status');
@@ -3353,29 +3357,49 @@ async function executarPalletCaixaItem(inputVal, palletId) {
     return;
   }
 
+  const normalizedPalletId = palletId.trim().toUpperCase();
+  const normalizedInput = inputVal.trim().toUpperCase();
+
   // Validação: Capacidade Máxima do Pallet (40 Caixas)
-  const caixasNoPallet = obterCaixasDoPallet(palletId);
+  const caixasNoPallet = obterCaixasDoPallet(normalizedPalletId);
   if (caixasNoPallet.length >= 40) {
     playErrorBeep();
-    alert(`BLOQUEIO DE CAPACIDADE:\nO Pallet [${palletId}] já atingiu a capacidade máxima de 40 caixas! Inicie um novo pallet.`);
+    alert(`BLOQUEIO DE CAPACIDADE:\nO Pallet [${normalizedPalletId}] já atingiu a capacidade máxima de 40 caixas! Inicie um novo pallet.`);
     return;
   }
 
   // 1. Localizar as unidades da caixa pelo código da caixa OU por serial/GPON/MAC de uma unidade
-  let targetCaixaId = inputVal;
-  let boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+  let targetCaixaId = normalizedInput;
+  let boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
 
   if (boxUnits.length === 0) {
-    const singleUnit = appState.units.find(u => (u.serial === inputVal || u.gpon === inputVal || u.mac === inputVal) && u.embalagem);
+    const singleUnit = appState.units.find(u => (u.serial === normalizedInput || u.gpon === normalizedInput || u.mac === normalizedInput) && u.embalagem);
     if (singleUnit) {
-      targetCaixaId = singleUnit.embalagem.caixaId;
-      boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+      targetCaixaId = String(singleUnit.embalagem.caixaId).trim().toUpperCase();
+      boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
+    }
+  }
+
+  // Se ainda não encontrou localmente, recarrega do servidor caso a caixa tenha acabado de ser criada
+  if (boxUnits.length === 0) {
+    try {
+      await loadStateFromServer();
+      boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
+      if (boxUnits.length === 0) {
+        const singleUnit = appState.units.find(u => (u.serial === normalizedInput || u.gpon === normalizedInput || u.mac === normalizedInput) && u.embalagem);
+        if (singleUnit) {
+          targetCaixaId = String(singleUnit.embalagem.caixaId).trim().toUpperCase();
+          boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
+        }
+      }
+    } catch (e) {
+      console.warn("Falha ao recarregar estado do servidor:", e);
     }
   }
 
   if (boxUnits.length === 0) {
     playErrorBeep();
-    alert(`BLOQUEIO:\nNenhuma caixa embalada encontrada para o termo: "${inputVal}".\n\nApenas caixas que passaram pelo processo de Embalagem podem ser paletizadas.`);
+    alert(`BLOQUEIO:\nNenhuma caixa embalada encontrada para o termo: "${normalizedInput}".\n\nApenas caixas que passaram pelo processo de Embalagem podem ser paletizadas.`);
     return;
   }
 
@@ -3383,6 +3407,17 @@ async function executarPalletCaixaItem(inputVal, palletId) {
   const jaPaletizada = boxUnits.some(u => u.pallet && u.pallet.palletId);
   if (jaPaletizada) {
     const existingPallet = boxUnits.find(u => u.pallet && u.pallet.palletId).pallet.palletId;
+    const normExistingPallet = String(existingPallet).trim().toUpperCase();
+    
+    if (normExistingPallet === normalizedPalletId) {
+      // AUTO-RECUPERAÇÃO: A caixa já está neste pallet! Atualiza a tela de imediato sem travar
+      updatePalletSummary();
+      carregarListaTodosPallets();
+      playSuccessBeep();
+      showToast(`A caixa [${targetCaixaId}] já está adicionada neste Pallet (${normalizedPalletId}).`);
+      return;
+    }
+
     playErrorBeep();
     alert(`BLOQUEIO DE DUPLICIDADE:\nA caixa [${targetCaixaId}] já está vinculada ao Pallet [${existingPallet}]!`);
     return;
@@ -3390,29 +3425,39 @@ async function executarPalletCaixaItem(inputVal, palletId) {
 
   const caixaRegional = boxUnits[0].localidade || '';
 
+  // TRAVA DE REGIONAL (Não permitir misturar regionais no mesmo pallet)
+  if (caixasNoPallet.length > 0) {
+    const palletRegional = caixasNoPallet[0].localidade || '';
+    if (palletRegional && caixaRegional && caixaRegional.trim().toUpperCase() !== palletRegional.trim().toUpperCase()) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE REGIONAL:\nO Pallet [${normalizedPalletId}] aceita apenas a Regional [${palletRegional}].\nA caixa [${targetCaixaId}] pertence à Regional [${caixaRegional}] e não pode ser misturada neste pallet!`);
+      return;
+    }
+  }
+
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
   const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
 
   const palletData = {
-    palletId,
+    palletId: normalizedPalletId,
     data: dateStr,
     operador: userAtual,
     fechado: false
   };
 
-  // ATUALIZAÇÃO ATÔMICA IMEDIATA NO ESTADO E NA TELA
+  // ATUALIZAÇÃO ATÔMICA IMEDIATA NO ESTADO E NA TELA (Sem atraso de rede)
   for (const u of boxUnits) {
     u.pallet = palletData;
     registrarEventoHistorico(u, {
       tipo: 'PALLETIZACAO',
-      titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet [${palletId}]`,
-      descricao: `Caixa [${targetCaixaId}] (Regional: ${caixaRegional}) adicionada ao Pallet [${palletId}] pelo operador [${userAtual}]`,
+      titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet [${normalizedPalletId}]`,
+      descricao: `Caixa [${targetCaixaId}] (Regional: ${caixaRegional}) adicionada ao Pallet [${normalizedPalletId}] pelo operador [${userAtual}]`,
       operador: userAtual,
       data: dateStr,
       statusAnterior: u.status,
       statusNovo: 'EMBALADO',
-      extra: { palletId, caixaId: targetCaixaId, regional: caixaRegional }
+      extra: { palletId: normalizedPalletId, caixaId: targetCaixaId, regional: caixaRegional }
     });
   }
 
@@ -3422,8 +3467,8 @@ async function executarPalletCaixaItem(inputVal, palletId) {
   updatePalletSummary();
   carregarListaTodosPallets();
 
-  const updatedCaixas = obterCaixasDoPallet(palletId);
-  showToast(`Caixa ${targetCaixaId} (${boxUnits.length} un) adicionada ao Pallet ${palletId}! [${updatedCaixas.length}/40]`);
+  const updatedCaixas = obterCaixasDoPallet(normalizedPalletId);
+  showToast(`Caixa ${targetCaixaId} (${boxUnits.length} un) adicionada ao Pallet ${normalizedPalletId}! [${updatedCaixas.length}/40]`);
 
   // PERSISTÊNCIA ASSÍNCRONA NO SERVIDOR
   try {
@@ -3437,9 +3482,7 @@ async function executarPalletCaixaItem(inputVal, palletId) {
           historico: u.historico
         })
       })
-    )).then(() => {
-      syncCaixaWithServer(targetCaixaId);
-    }).catch(err => {
+    )).catch(err => {
       console.error("Erro ao persistir palletização no servidor:", err);
     });
   } catch (err) {
@@ -3449,7 +3492,7 @@ async function executarPalletCaixaItem(inputVal, palletId) {
   // Fechamento automático ao atingir 40 caixas
   if (updatedCaixas.length >= 40) {
     setTimeout(async () => {
-      await fecharPallet(palletId);
+      await fecharPallet(normalizedPalletId);
     }, 300);
   }
 }
