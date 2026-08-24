@@ -6755,9 +6755,12 @@ function imprimirFolhaA4PalletSucata(palletId) {
   printWindow.document.close();
 }
 
+let currentAjustePalletSucataId = null;
+
 function carregarListaTodosPalletsSucata() {
   const tbody = document.getElementById('tbody-todos-pallets-sucata');
-  if (!tbody) return;
+  const tbodyConsulta = document.getElementById('tbody-consulta-pallets-sucata');
+  const selectEl = document.getElementById('pallet-sucata-select-rapido');
 
   const palletsMap = {};
   appState.units.filter(u => u.pallet && u.pallet.palletId && String(u.pallet.palletId).startsWith('PS')).forEach(u => {
@@ -6776,35 +6779,230 @@ function carregarListaTodosPalletsSucata() {
   });
 
   const palletsList = Object.values(palletsMap);
-  if (palletsList.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum pallet de sucata registrado ainda.</td></tr>';
+
+  if (selectEl) {
+    selectEl.innerHTML = '<option value="">-- Selecione um Pallet --</option>';
+    palletsList.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.palletId;
+      opt.innerText = `${p.palletId} - ${p.modelo} (${p.regional}) [${p.fechado ? 'FECHADO' : 'ABERTO'}]`;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  const renderTableRows = () => {
+    if (palletsList.length === 0) {
+      return '<tr><td colspan="7" class="text-center text-muted">Nenhum pallet de sucata registrado ainda.</td></tr>';
+    }
+    return palletsList.map(p => {
+      const caixas = obterCaixasDoPalletSucata(p.palletId);
+      const statusBadge = p.fechado 
+        ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>' 
+        : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>';
+      return `
+        <tr>
+          <td><strong style="color: #f87171;">${p.palletId}</strong></td>
+          <td>${p.regional}</td>
+          <td><strong>${caixas.length} / 40</strong></td>
+          <td>${p.unidades.length} un</td>
+          <td>${statusBadge}</td>
+          <td>${p.data}</td>
+          <td style="text-align: center; white-space: nowrap;">
+            <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletSucata('${p.palletId}')" title="Reimprimir Folha A4 deste Pallet de Sucata">
+              <i class="fa-solid fa-print"></i>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="selecionarPalletSucataParaAjuste('${p.palletId}')" title="Editar / Ajustar Pallet de Sucata" style="margin-left: 4px;">
+              <i class="fa-solid fa-pen-to-square"></i> Editar
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="excluirPalletSucataDireto('${p.palletId}')" title="Excluir Pallet de Sucata" style="margin-left: 4px;">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  };
+
+  const rowsHtml = renderTableRows();
+  if (tbody) tbody.innerHTML = rowsHtml;
+  if (tbodyConsulta) tbodyConsulta.innerHTML = rowsHtml;
+}
+
+function selecionarPalletSucataParaAjuste(palletId) {
+  if (!palletId) {
+    const painel = document.getElementById('painel-ajuste-pallet-sucata');
+    if (painel) painel.classList.add('hidden');
+    currentAjustePalletSucataId = null;
+    return;
+  }
+  
+  const searchInput = document.getElementById('pallet-sucata-search-input');
+  if (searchInput) searchInput.value = palletId;
+
+  // Se estiver em outra tela, navega para Pallet de Sucata
+  const viewPallet = document.getElementById('view-embalagem-pallet-sucata');
+  if (viewPallet && viewPallet.classList.contains('hidden')) {
+    navigate('embalagem-pallet-sucata');
+  }
+
+  exibirDetalhesPalletSucataParaAjuste(palletId);
+}
+
+function exibirDetalhesPalletSucataParaAjuste(palletId) {
+  currentAjustePalletSucataId = palletId;
+  const painel = document.getElementById('painel-ajuste-pallet-sucata');
+  if (!painel) return;
+
+  const caixas = obterCaixasDoPalletSucata(palletId);
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === String(palletId).trim().toUpperCase());
+
+  if (unitsInPallet.length === 0 && caixas.length === 0) {
+    painel.classList.add('hidden');
+    carregarListaTodosPalletsSucata();
     return;
   }
 
-  tbody.innerHTML = palletsList.map(p => {
-    const caixas = obterCaixasDoPalletSucata(p.palletId);
-    const statusBadge = p.fechado 
-      ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>' 
-      : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>';
-    return `
+  painel.classList.remove('hidden');
+  const modelo = caixas.length > 0 ? caixas[0].modelo : '-';
+  const localidade = caixas.length > 0 ? caixas[0].localidade : '-';
+
+  const titleEl = document.getElementById('ajuste-pallet-sucata-title');
+  if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-pallet"></i> Pallet de Sucata: ${palletId}`;
+
+  const modEl = document.getElementById('ajuste-pallet-sucata-modelo');
+  if (modEl) modEl.innerText = modelo;
+
+  const locEl = document.getElementById('ajuste-pallet-sucata-localidade');
+  if (locEl) locEl.innerText = localidade;
+
+  const totalCxEl = document.getElementById('ajuste-pallet-sucata-total-caixas');
+  if (totalCxEl) totalCxEl.innerText = `${caixas.length} / 40 Caixas`;
+
+  const totalUnEl = document.getElementById('ajuste-pallet-sucata-total-unidades');
+  if (totalUnEl) totalUnEl.innerText = `${unitsInPallet.length} Unidades`;
+
+  const tbody = document.getElementById('tbody-ajuste-caixas-pallet-sucata');
+  if (tbody) {
+    tbody.innerHTML = caixas.map((c, idx) => `
       <tr>
-        <td><strong style="color: #f87171;">${p.palletId}</strong></td>
-        <td>${p.regional}</td>
-        <td><strong>${caixas.length}</strong></td>
-        <td>${p.unidades.length} un</td>
-        <td>${statusBadge}</td>
-        <td>${p.data}</td>
+        <td>${idx + 1}</td>
+        <td><strong style="color: #f87171;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
+        <td>${c.modelo}</td>
+        <td>${c.localidade}</td>
+        <td><span class="badge badge-success">${c.unidades.length} un</span></td>
+        <td>${c.data}</td>
         <td style="text-align: center;">
-          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletSucata('${p.palletId}')" title="Reimprimir Folha A4 deste Pallet de Sucata">
-            <i class="fa-solid fa-print"></i> Reimprimir
+          <button type="button" class="btn btn-danger btn-sm" onclick="removerCaixaDoPalletSucataAjuste('${palletId}', '${c.caixaId}')" title="Remover caixa deste pallet de sucata">
+            <i class="fa-solid fa-minus-circle"></i> Remover do Pallet
           </button>
         </td>
       </tr>
-    `;
-  }).join('');
+    `).join('');
+  }
+
+  painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function adicionarCaixaNoPalletSucataAjuste(e) {
+  e.preventDefault();
+  if (!currentAjustePalletSucataId) {
+    alert("Nenhum Pallet de Sucata selecionado para ajuste!");
+    return;
+  }
+
+  const inputEl = document.getElementById('ajuste-pallet-sucata-add-caixa-input');
+  if (!inputEl) return;
+  const rawInput = inputEl.value.trim().toUpperCase();
+  if (!rawInput) return;
+
+  inputEl.value = '';
+  await executarPalletSucataCaixaItem(rawInput, currentAjustePalletSucataId);
+  exibirDetalhesPalletSucataParaAjuste(currentAjustePalletSucataId);
+}
+
+async function removerCaixaDoPalletSucataAjuste(palletId, caixaId) {
+  await removerCaixaDoPalletSucataDireto(palletId, caixaId);
+  if (currentAjustePalletSucataId === palletId) {
+    exibirDetalhesPalletSucataParaAjuste(palletId);
+  }
+}
+
+async function solicitarExcluirPalletSucata() {
+  if (!currentAjustePalletSucataId) return;
+  if (!confirm(`Deseja realmente EXCLUIR o Pallet de Sucata [${currentAjustePalletSucataId}]?\n\nTodas as caixas e unidades vinculadas serão desvinculadas deste pallet.`)) {
+    return;
+  }
+  await excluirPalletSucataDireto(currentAjustePalletSucataId);
+}
+
+async function excluirPalletSucataDireto(palletId) {
+  if (!confirm(`Deseja realmente desvincular todas as caixas e excluir o Pallet de Sucata [${palletId}]?`)) {
+    return;
+  }
+
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === String(palletId).trim().toUpperCase());
+  for (const u of unitsInPallet) {
+    u.pallet = null;
+    fetch(`/api/units/${u.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'SUCATA',
+        pallet: null,
+        historico: u.historico
+      })
+    }).catch(err => console.error(err));
+  }
+
+  saveStateToStorage();
+  palletsFechadosSet.delete(palletId);
+
+  if (currentAjustePalletSucataId === palletId) {
+    currentAjustePalletSucataId = null;
+    const painel = document.getElementById('painel-ajuste-pallet-sucata');
+    if (painel) painel.classList.add('hidden');
+  }
+
+  updatePalletSucataSummary();
+  carregarListaTodosPalletsSucata();
+  showToast(`Pallet de Sucata ${palletId} excluído com sucesso.`);
+  playSuccessBeep();
+}
+
+function buscarPalletSucataParaAjuste() {
+  const query = document.getElementById('pallet-sucata-search-input').value.trim().toUpperCase();
+  if (!query) {
+    alert("Informe o código do Pallet (PS...) ou o código da Caixa de Sucata!");
+    return;
+  }
+
+  let targetPalletId = query;
+  let matchingUnits = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === targetPalletId);
+
+  if (matchingUnits.length === 0) {
+    // Busca por caixa dentro do pallet
+    const singleUnit = appState.units.find(u => u.pallet && u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === query);
+    if (singleUnit) {
+      targetPalletId = singleUnit.pallet.palletId;
+      matchingUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === targetPalletId);
+    }
+  }
+
+  if (matchingUnits.length === 0) {
+    playErrorBeep();
+    alert(`Nenhum Pallet de Sucata encontrado para a busca: "${query}".`);
+    return;
+  }
+
+  selecionarPalletSucataParaAjuste(targetPalletId);
 }
 
 function initEmbalagemConsultaSucataView() {
+  carregarConsultaSucataCompleta();
+}
+
+function carregarConsultaSucataCompleta() {
+  carregarListaTodosPalletsSucata();
   carregarListaTodasCaixasSucata();
 }
 
