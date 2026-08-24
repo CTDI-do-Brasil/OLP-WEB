@@ -7006,6 +7006,8 @@ function carregarConsultaSucataCompleta() {
   carregarListaTodasCaixasSucata();
 }
 
+let currentAjusteCaixaSucataId = null;
+
 function carregarListaTodasCaixasSucata() {
   const selectEl = document.getElementById('ajuste-caixas-sucata-select');
   const tbody = document.getElementById('tbody-todas-caixas-sucata');
@@ -7046,15 +7048,21 @@ function carregarListaTodasCaixasSucata() {
 
     tbody.innerHTML = caixasList.map(c => `
       <tr>
-        <td><strong style="color: #f87171;">${c.caixaId}</strong></td>
+        <td><strong style="color: #f87171;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
         <td>${c.modelo}</td>
         <td>${c.localidade}</td>
-        <td><strong>${c.unidades.length} / 10</strong></td>
-        <td>${c.fechada ? '<span class="badge badge-success">FECHADA</span>' : '<span class="badge badge-warning">ABERTA</span>'}</td>
+        <td><span class="badge ${c.unidades.length >= 10 ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / 10</span></td>
+        <td>${c.fechada ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>' : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>'}</td>
         <td>${c.data}</td>
-        <td style="text-align: center;">
-          <button type="button" class="btn btn-danger btn-sm" onclick="reimprimirEtiquetaCaixaSucataDireto('${c.caixaId}')" title="Reimprimir Etiqueta ZPL desta Caixa de Sucata">
+        <td style="text-align: center; white-space: nowrap;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="selecionarCaixaSucataParaAjuste('${c.caixaId}')" title="Ajustar / Editar Caixa de Sucata">
+            <i class="fa-solid fa-pen-to-square"></i> Ajustar
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="reimprimirEtiquetaCaixaSucataDireto('${c.caixaId}')" title="Reimprimir Etiqueta ZPL" style="margin-left: 4px;">
             <i class="fa-solid fa-print"></i>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="excluirCaixaSucataDireto('${c.caixaId}')" title="Excluir Caixa de Sucata" style="margin-left: 4px; color: #ef4444; border-color: #ef4444;">
+            <i class="fa-solid fa-trash-can"></i>
           </button>
         </td>
       </tr>
@@ -7068,12 +7076,227 @@ function buscarCaixaSucataParaAjuste() {
     alert("Informe o código da caixa de sucata (CS...) ou serial!");
     return;
   }
-  selecionarCaixaSucataRapida(query);
+  
+  let targetCaixaId = query;
+  const singleUnit = appState.units.find(u => (u.serial === query || u.gpon === query || u.mac === query) && u.embalagem && String(u.embalagem.caixaId).startsWith('CS'));
+  if (singleUnit) {
+    targetCaixaId = singleUnit.embalagem.caixaId;
+  }
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert(`Nenhuma caixa de sucata encontrada para "${query}".`);
+    return;
+  }
+
+  selecionarCaixaSucataParaAjuste(targetCaixaId);
 }
 
-function selecionarCaixaSucataRapida(caixaId) {
-  if (!caixaId) return;
-  reimprimirEtiquetaCaixaSucataDireto(caixaId);
+function selecionarCaixaSucataParaAjuste(caixaId) {
+  if (!caixaId) {
+    const painel = document.getElementById('painel-ajuste-caixa-sucata');
+    if (painel) painel.classList.add('hidden');
+    currentAjusteCaixaSucataId = null;
+    return;
+  }
+
+  const searchInput = document.getElementById('ajuste-caixa-sucata-search');
+  if (searchInput) searchInput.value = caixaId;
+
+  exibirDetalhesCaixaSucataParaAjuste(caixaId);
+}
+
+function exibirDetalhesCaixaSucataParaAjuste(caixaId) {
+  currentAjusteCaixaSucataId = caixaId;
+  const painel = document.getElementById('painel-ajuste-caixa-sucata');
+  if (!painel) return;
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  if (boxUnits.length === 0) {
+    painel.classList.add('hidden');
+    carregarListaTodasCaixasSucata();
+    return;
+  }
+
+  painel.classList.remove('hidden');
+  const modelo = boxUnits.length > 0 ? boxUnits[0].modelo : '-';
+  const localidade = boxUnits.length > 0 ? boxUnits[0].localidade : '-';
+  const isFechada = boxUnits.length >= 10 || boxUnits.some(u => u.embalagem && u.embalagem.fechada);
+
+  const titleEl = document.getElementById('ajuste-detalhe-caixa-sucata-id');
+  if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-box"></i> Caixa de Sucata: ${caixaId}`;
+
+  const modEl = document.getElementById('ajuste-detalhe-modelo-sucata');
+  if (modEl) modEl.innerText = modelo;
+
+  const locEl = document.getElementById('ajuste-detalhe-localidade-sucata');
+  if (locEl) locEl.innerText = localidade;
+
+  const totalEl = document.getElementById('ajuste-detalhe-total-sucata');
+  if (totalEl) totalEl.innerText = `${boxUnits.length} / 10`;
+
+  const statusEl = document.getElementById('ajuste-detalhe-status-sucata');
+  if (statusEl) {
+    statusEl.innerHTML = isFechada 
+      ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>' 
+      : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>';
+  }
+
+  const tbody = document.getElementById('tbody-ajuste-unidades-caixa-sucata');
+  if (tbody) {
+    tbody.innerHTML = boxUnits.map((u, idx) => `
+      <tr>
+        <td>${idx + 1}</td>
+        <td><strong>${u.serial}</strong></td>
+        <td>${u.gpon || '-'}</td>
+        <td>${u.mac || '-'}</td>
+        <td><span class="badge badge-danger">${u.modelo}</span></td>
+        <td>${u.localidade || '-'}</td>
+        <td>${u.embalagem ? u.embalagem.data : '-'}</td>
+        <td>${u.embalagem ? u.embalagem.operador : '-'}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="removerUnidadeDaCaixaSucataAjuste('${caixaId}', '${u.id}')" title="Remover unidade desta caixa de sucata">
+            <i class="fa-solid fa-times"></i> Remover
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  painel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function adicionarUnidadeNaCaixaSucataAjuste(e) {
+  e.preventDefault();
+  if (!currentAjusteCaixaSucataId) {
+    alert("Nenhuma caixa de sucata selecionada para ajuste!");
+    return;
+  }
+
+  const inputEl = document.getElementById('ajuste-add-serial-sucata');
+  if (!inputEl) return;
+  const rawSerial = inputEl.value.trim().toUpperCase();
+  if (!rawSerial) return;
+
+  inputEl.value = '';
+  await executarEmbalarUnidadeSucataItem(rawSerial, currentAjusteCaixaSucataId);
+  exibirDetalhesCaixaSucataParaAjuste(currentAjusteCaixaSucataId);
+  carregarListaTodasCaixasSucata();
+}
+
+async function removerUnidadeDaCaixaSucataAjuste(caixaId, unitId) {
+  const unit = appState.units.find(u => u.id === unitId || u.serial === unitId);
+  if (!unit) return;
+
+  if (!confirm(`Deseja remover a unidade [${unit.serial}] da caixa de sucata [${caixaId}]?`)) {
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
+  unit.embalagem = null;
+  unit.status = 'SUCATA';
+
+  registrarEventoHistorico(unit, {
+    tipo: 'REMOCAO_CAIXA_SUCATA',
+    titulo: `Unidade Removida da Caixa de Sucata [${caixaId}]`,
+    descricao: `Unidade [${unit.serial}] removida da caixa de sucata [${caixaId}] pelo operador [${userAtual}].`,
+    operador: userAtual,
+    data: dateStr,
+    statusNovo: 'SUCATA',
+    extra: { caixaId }
+  });
+
+  saveStateToStorage();
+
+  try {
+    await fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'SUCATA',
+        embalagem: null,
+        historico: unit.historico
+      })
+    });
+  } catch (err) {}
+
+  syncCaixaWithServer(caixaId);
+  caixasImpressasSet.delete(caixaId);
+
+  exibirDetalhesCaixaSucataParaAjuste(caixaId);
+  carregarListaTodasCaixasSucata();
+  showToast(`Unidade ${unit.serial} removida da caixa de sucata com sucesso.`);
+  playSuccessBeep();
+}
+
+function reimprimirEtiquetaCaixaSucataAtualAjuste() {
+  if (!currentAjusteCaixaSucataId) return;
+  reimprimirEtiquetaCaixaSucataDireto(currentAjusteCaixaSucataId);
+}
+
+async function solicitarExcluirCaixaSucata() {
+  if (!currentAjusteCaixaSucataId) return;
+  await excluirCaixaSucataDireto(currentAjusteCaixaSucataId);
+}
+
+async function excluirCaixaSucataDireto(caixaId) {
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  if (!confirm(`ATENÇÃO: Deseja realmente EXCLUIR toda a caixa de sucata [${caixaId}]?\n\n- Total de unidades afetadas: ${boxUnits.length}\n- Todas as unidades serão liberadas.`)) {
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
+  for (const unit of boxUnits) {
+    unit.embalagem = null;
+    unit.pallet = null;
+    unit.status = 'SUCATA';
+
+    registrarEventoHistorico(unit, {
+      tipo: 'EXCLUSAO_CAIXA_SUCATA',
+      titulo: `Caixa de Sucata [${caixaId}] Excluída`,
+      descricao: `A caixa de sucata [${caixaId}] foi cancelada/excluída pelo operador [${userAtual}].`,
+      operador: userAtual,
+      data: dateStr,
+      statusNovo: 'SUCATA',
+      extra: { caixaId }
+    });
+
+    fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'SUCATA',
+        embalagem: null,
+        pallet: null,
+        historico: unit.historico
+      })
+    }).catch(err => console.error(err));
+  }
+
+  saveStateToStorage();
+  caixasImpressasSet.delete(caixaId);
+
+  try {
+    await fetch(`/api/caixas/${caixaId}`, { method: 'DELETE' });
+  } catch (err) {}
+
+  if (currentAjusteCaixaSucataId === caixaId) {
+    currentAjusteCaixaSucataId = null;
+    const painel = document.getElementById('painel-ajuste-caixa-sucata');
+    if (painel) painel.classList.add('hidden');
+  }
+
+  carregarConsultaSucataCompleta();
+  showToast(`Caixa de sucata ${caixaId} excluída com sucesso.`);
+  playSuccessBeep();
 }
 
 function reimprimirEtiquetaCaixaSucata(e) {
