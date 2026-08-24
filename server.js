@@ -671,9 +671,26 @@ app.post('/api/print/zebra', async (req, res) => {
 // SEQUENCE GENERATION ENDPOINTS FOR PALLET (P000000001)
 app.get('/api/sequence/pallet/current', async (req, res) => {
   try {
-    const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'pallet'");
-    const currentVal = result.rows[0] ? result.rows[0].current_value : 0;
-    const nextSeq = currentVal + 1;
+    const unitsResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet->>'palletId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE pallet IS NOT NULL AND pallet->>'palletId' IS NOT NULL
+    `);
+    const caixasResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet_id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+      WHERE pallet_id IS NOT NULL
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+
+    const nextSeq = Math.max(1, maxRealVal === 0 ? 1 : maxRealVal + 1);
     const formatted = 'P' + String(nextSeq).padStart(9, '0');
     res.json({ formatted, sequence: nextSeq });
   } catch (err) {
@@ -685,21 +702,33 @@ app.post('/api/sequence/pallet/next', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const result = await client.query(
-      "SELECT current_value FROM sequence_generators WHERE name = 'pallet' FOR UPDATE"
+    const unitsResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet->>'palletId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE pallet IS NOT NULL AND pallet->>'palletId' IS NOT NULL
+    `);
+    const caixasResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet_id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+      WHERE pallet_id IS NOT NULL
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+    const nextVal = maxRealVal + 1;
+
+    await client.query(
+      `INSERT INTO sequence_generators (name, current_value) 
+       VALUES ('pallet', $1) 
+       ON CONFLICT (name) DO UPDATE SET current_value = EXCLUDED.current_value`,
+      [nextVal]
     );
-    let nextVal = 1;
-    if (result.rows[0]) {
-      nextVal = result.rows[0].current_value + 1;
-      await client.query(
-        "UPDATE sequence_generators SET current_value = $1 WHERE name = 'pallet'",
-        [nextVal]
-      );
-    } else {
-      await client.query(
-        "INSERT INTO sequence_generators (name, current_value) VALUES ('pallet', 1)"
-      );
-    }
+
     await client.query('COMMIT');
     const formatted = 'P' + String(nextVal).padStart(9, '0');
     res.json({ formatted, sequence: nextVal });
@@ -714,9 +743,25 @@ app.post('/api/sequence/pallet/next', async (req, res) => {
 // SEQUENCE GENERATION ENDPOINTS FOR REGULAR CAIXA
 app.get('/api/sequence/caixa/current', async (req, res) => {
   try {
-    const result = await pool.query("SELECT current_value FROM sequence_generators WHERE name = 'caixa'");
-    const currentVal = result.rows[0] ? result.rows[0].current_value : 0;
-    const nextSeq = currentVal + 1;
+    const unitsResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(embalagem->>'caixaId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE embalagem IS NOT NULL AND embalagem->>'caixaId' IS NOT NULL
+    `);
+    const caixasResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+
+    const nextSeq = Math.max(1, maxRealVal === 0 ? 1 : maxRealVal + 1);
     const formatted = 'C' + String(nextSeq).padStart(9, '0');
     res.json({ formatted, sequence: nextSeq });
   } catch (err) {
@@ -728,21 +773,32 @@ app.post('/api/sequence/caixa/next', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const result = await client.query(
-      "SELECT current_value FROM sequence_generators WHERE name = 'caixa' FOR UPDATE"
+    const unitsResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(embalagem->>'caixaId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE embalagem IS NOT NULL AND embalagem->>'caixaId' IS NOT NULL
+    `);
+    const caixasResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+    const nextVal = maxRealVal + 1;
+
+    await client.query(
+      `INSERT INTO sequence_generators (name, current_value) 
+       VALUES ('caixa', $1) 
+       ON CONFLICT (name) DO UPDATE SET current_value = EXCLUDED.current_value`,
+      [nextVal]
     );
-    let nextVal = 1;
-    if (result.rows[0]) {
-      nextVal = result.rows[0].current_value + 1;
-      await client.query(
-        "UPDATE sequence_generators SET current_value = $1 WHERE name = 'caixa'",
-        [nextVal]
-      );
-    } else {
-      await client.query(
-        "INSERT INTO sequence_generators (name, current_value) VALUES ('caixa', 1)"
-      );
-    }
+
     await client.query('COMMIT');
     const formatted = 'C' + String(nextVal).padStart(9, '0');
     res.json({ formatted, sequence: nextVal });

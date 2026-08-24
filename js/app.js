@@ -3243,7 +3243,8 @@ async function initPalletView() {
   await loadStateFromServer();
   const codeField = document.getElementById('pallet-code-id');
   if (codeField) {
-    if (!codeField.value) {
+    const currentPalletUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === codeField.value);
+    if (!codeField.value || currentPalletUnits.length === 0) {
       codeField.placeholder = "Carregando...";
       const code = await fetchCurrentPalletCodeFromServer();
       codeField.value = code;
