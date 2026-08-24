@@ -1486,11 +1486,11 @@ async function reimprimirEtiquetaCaixa(e) {
 
 function saveSelectedPrinterPreference(viewType) {
   if (viewType === 'embalagem') {
-    const val = document.getElementById('emb-printer-select').value;
-    localStorage.setItem('wms_selected_printer_emb', val);
+    const el = document.getElementById('emb-printer-select');
+    if (el) localStorage.setItem('wms_selected_printer_emb', el.value);
   } else if (viewType === 'pallet') {
-    const val = document.getElementById('pallet-printer-select').value;
-    localStorage.setItem('wms_selected_printer_pallet', val);
+    const el = document.getElementById('pallet-printer-select');
+    if (el) localStorage.setItem('wms_selected_printer_pallet', el.value);
   }
 }
 
