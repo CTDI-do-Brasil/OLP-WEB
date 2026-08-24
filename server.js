@@ -489,9 +489,40 @@ app.put('/api/units/:id', async (req, res) => {
 
     values.push(id);
     const sql = `UPDATE units SET ${fields.join(', ')} WHERE id = $${values.length}`;
-    await pool.query(sql, values);
+    const result = await pool.query(sql, values);
 
-    res.json({ success: true, message: 'Unidade atualizada!' });
+    if (result.rowCount === 0) {
+      // Unidade ainda não existia no banco, realiza INSERT (UPSERT)
+      const serial = body.serial || id;
+      const gpon = body.gpon || '';
+      const mac = body.mac || '';
+      const modelo = body.modelo || 'GERAL';
+      const fabricante = body.fabricante || 'GERAL';
+      const localidade = body.localidade || 'GERAL';
+      const operador = body.operador || 'OPERADOR';
+      const status = body.status || 'RECEBIDO';
+      const dataRecebimento = body.dataRecebimento || new Date().toISOString().slice(0, 10);
+      const cosmetico = body.cosmetico ? JSON.stringify(body.cosmetico) : null;
+      const funcional = body.funcional ? JSON.stringify(body.funcional) : null;
+      const embalagem = body.embalagem ? JSON.stringify(body.embalagem) : null;
+      const pallet = body.pallet ? JSON.stringify(body.pallet) : null;
+      const expedicao = body.expedicao ? JSON.stringify(body.expedicao) : null;
+      const sucata = body.sucata ? JSON.stringify(body.sucata) : null;
+      const reparo_eletronico = body.reparo_eletronico ? JSON.stringify(body.reparo_eletronico) : null;
+      const historico = body.historico ? JSON.stringify(body.historico) : JSON.stringify([]);
+
+      await pool.query(`
+        INSERT INTO units (id, serial, gpon, mac, modelo, fabricante, localidade, operador, data_recebimento, status, cosmetico, funcional, embalagem, pallet, expedicao, sucata, reparo_eletronico, historico)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        ON CONFLICT (id) DO UPDATE SET
+          status = EXCLUDED.status,
+          embalagem = EXCLUDED.embalagem,
+          pallet = EXCLUDED.pallet,
+          historico = EXCLUDED.historico
+      `, [id, serial, gpon, mac, modelo, fabricante, localidade, operador, dataRecebimento, status, cosmetico, funcional, embalagem, pallet, expedicao, sucata, reparo_eletronico, historico]);
+    }
+
+    res.json({ success: true, message: 'Unidade salva com sucesso!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1028,13 +1059,13 @@ app.post('/api/caixas', async (req, res) => {
          fabricante = COALESCE(EXCLUDED.fabricante, caixas.fabricante),
          localidade = COALESCE(EXCLUDED.localidade, caixas.localidade),
          operador = COALESCE(EXCLUDED.operador, caixas.operador),
-         data_criacao = COALESCE(EXCLUDED.data_criacao, caixas.data_criacao),
-         data_fechamento = COALESCE(EXCLUDED.data_fechamento, caixas.data_fechamento),
-         status = COALESCE(EXCLUDED.status, caixas.status),
-         quantidade = COALESCE(EXCLUDED.quantidade, caixas.quantidade),
-         pallet_id = COALESCE(EXCLUDED.pallet_id, caixas.pallet_id),
-         gpon_ids = COALESCE(EXCLUDED.gpon_ids, caixas.gpon_ids),
-         unidades = COALESCE(EXCLUDED.unidades, caixas.unidades)`,
+         data_criacao = COALESCE(caixas.data_criacao, EXCLUDED.data_criacao),
+         data_fechamento = EXCLUDED.data_fechamento,
+         status = EXCLUDED.status,
+         quantidade = EXCLUDED.quantidade,
+         pallet_id = EXCLUDED.pallet_id,
+         gpon_ids = EXCLUDED.gpon_ids,
+         unidades = EXCLUDED.unidades`,
       [
         id,
         modelo || null,

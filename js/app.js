@@ -4607,6 +4607,14 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: unit.id,
+        serial: unit.serial,
+        gpon: unit.gpon,
+        mac: unit.mac,
+        modelo: unit.modelo,
+        fabricante: unit.fabricante,
+        localidade: unit.localidade,
+        operador: unit.operador,
         status: 'EMBALADO',
         embalagem: embalagemData,
         historico: unit.historico
@@ -4619,7 +4627,7 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
     saveStateToStorage();
 
     // Sincroniza informações da caixa e GPON IDs no banco de dados
-    syncCaixaWithServer(currentAjusteCaixaId);
+    await syncCaixaWithServer(currentAjusteCaixaId);
 
     serialInput.value = '';
     playSuccessBeep();
@@ -4668,19 +4676,29 @@ async function removerUnidadeDaCaixaAjuste(unitId, serial) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: unit.id,
+        serial: unit.serial,
+        gpon: unit.gpon,
+        mac: unit.mac,
+        modelo: unit.modelo,
+        fabricante: unit.fabricante,
+        localidade: unit.localidade,
+        operador: unit.operador,
         status: novoStatus,
         embalagem: null,
+        pallet: null,
         historico: unit.historico
       })
     });
     if (!res.ok) throw new Error("Erro de resposta");
 
     unit.embalagem = null;
+    unit.pallet = null;
     unit.status = novoStatus;
     saveStateToStorage();
 
     // Sincroniza caixa atualizada no banco de dados
-    syncCaixaWithServer(caixaRemovidaId);
+    await syncCaixaWithServer(caixaRemovidaId);
 
     playSuccessBeep();
     showToast(`Unidade ${serial} removida da caixa com sucesso!`);
@@ -7181,6 +7199,7 @@ async function adicionarUnidadeNaCaixaSucataAjuste(e) {
 
   inputEl.value = '';
   await executarEmbalarUnidadeSucataItem(rawSerial, currentAjusteCaixaSucataId);
+  await syncCaixaWithServer(currentAjusteCaixaSucataId);
   exibirDetalhesCaixaSucataParaAjuste(currentAjusteCaixaSucataId);
   carregarListaTodasCaixasSucata();
 }
@@ -7217,14 +7236,23 @@ async function removerUnidadeDaCaixaSucataAjuste(caixaId, unitId) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        id: unit.id,
+        serial: unit.serial,
+        gpon: unit.gpon,
+        mac: unit.mac,
+        modelo: unit.modelo,
+        fabricante: unit.fabricante,
+        localidade: unit.localidade,
+        operador: unit.operador,
         status: 'SUCATA',
         embalagem: null,
+        pallet: null,
         historico: unit.historico
       })
     });
   } catch (err) {}
 
-  syncCaixaWithServer(caixaId);
+  await syncCaixaWithServer(caixaId);
   caixasImpressasSet.delete(caixaId);
 
   exibirDetalhesCaixaSucataParaAjuste(caixaId);
