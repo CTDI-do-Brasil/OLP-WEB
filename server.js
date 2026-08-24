@@ -810,6 +810,150 @@ app.post('/api/sequence/caixa/next', async (req, res) => {
   }
 });
 
+// SEQUENCE GENERATION ENDPOINTS FOR CAIXA SUCATA (CS000000001)
+app.get('/api/sequence/caixa-sucata/current', async (req, res) => {
+  try {
+    const unitsResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(embalagem->>'caixaId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE embalagem IS NOT NULL AND embalagem->>'caixaId' LIKE 'CS%'
+    `);
+    const caixasResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+      WHERE id LIKE 'CS%'
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+
+    const nextSeq = Math.max(1, maxRealVal === 0 ? 1 : maxRealVal + 1);
+    const formatted = 'CS' + String(nextSeq).padStart(9, '0');
+    res.json({ formatted, sequence: nextSeq });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sequence/caixa-sucata/next', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const unitsResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(embalagem->>'caixaId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE embalagem IS NOT NULL AND embalagem->>'caixaId' LIKE 'CS%'
+    `);
+    const caixasResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+      WHERE id LIKE 'CS%'
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+    const nextVal = maxRealVal + 1;
+
+    await client.query(
+      `INSERT INTO sequence_generators (name, current_value) 
+       VALUES ('caixa_sucata', $1) 
+       ON CONFLICT (name) DO UPDATE SET current_value = EXCLUDED.current_value`,
+      [nextVal]
+    );
+
+    await client.query('COMMIT');
+    const formatted = 'CS' + String(nextVal).padStart(9, '0');
+    res.json({ formatted, sequence: nextVal });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// SEQUENCE GENERATION ENDPOINTS FOR PALLET SUCATA (PS0000000001)
+app.get('/api/sequence/pallet-sucata/current', async (req, res) => {
+  try {
+    const unitsResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet->>'palletId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE pallet IS NOT NULL AND pallet->>'palletId' LIKE 'PS%'
+    `);
+    const caixasResult = await pool.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet_id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+      WHERE pallet_id LIKE 'PS%'
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+
+    const nextSeq = Math.max(1, maxRealVal === 0 ? 1 : maxRealVal + 1);
+    const formatted = 'PS' + String(nextSeq).padStart(10, '0');
+    res.json({ formatted, sequence: nextSeq });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sequence/pallet-sucata/next', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const unitsResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet->>'palletId', '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM units
+      WHERE pallet IS NOT NULL AND pallet->>'palletId' LIKE 'PS%'
+    `);
+    const caixasResult = await client.query(`
+      SELECT COALESCE(MAX(
+        NULLIF(REGEXP_REPLACE(pallet_id, '[^0-9]', '', 'g'), '')::integer
+      ), 0) as max_val
+      FROM caixas
+      WHERE pallet_id LIKE 'PS%'
+    `);
+
+    const maxUnits = parseInt(unitsResult.rows[0] ? unitsResult.rows[0].max_val : 0) || 0;
+    const maxCaixas = parseInt(caixasResult.rows[0] ? caixasResult.rows[0].max_val : 0) || 0;
+    const maxRealVal = Math.max(maxUnits, maxCaixas);
+    const nextVal = maxRealVal + 1;
+
+    await client.query(
+      `INSERT INTO sequence_generators (name, current_value) 
+       VALUES ('pallet_sucata', $1) 
+       ON CONFLICT (name) DO UPDATE SET current_value = EXCLUDED.current_value`,
+      [nextVal]
+    );
+
+    await client.query('COMMIT');
+    const formatted = 'PS' + String(nextVal).padStart(10, '0');
+    res.json({ formatted, sequence: nextVal });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // CAIXAS (BOXES) ENDPOINTS
 app.get('/api/caixas', async (req, res) => {
   const { pallet_id, status, modelo } = req.query;

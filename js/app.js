@@ -559,6 +559,9 @@ function navigate(viewId) {
   if (viewId === 'embalagem') initEmbalagemView();
   if (viewId === 'embalagem-pallet') initPalletView();
   if (viewId === 'embalagem-consulta') initEmbalagemConsultaView();
+  if (viewId === 'embalagem-sucata') initEmbalagemSucataView();
+  if (viewId === 'embalagem-pallet-sucata') initPalletSucataView();
+  if (viewId === 'embalagem-consulta-sucata') initEmbalagemConsultaSucataView();
 
   // Fechar gaveta em telas touch/menores ao clicar
   if (window.innerWidth <= 1024) {
@@ -576,9 +579,12 @@ function updatePageTitle(viewId) {
     'recebimento': { title: 'Recebimento de Unidades', sub: 'Entrada de equipamentos com validação rígida de regras' },
     'apontamento-cosmetico': { title: 'Apontamento Cosmético', sub: 'Inspeção estética e estática de unidades' },
     'apontamento-funcional': { title: 'Apontamento Funcional', sub: 'Testes de conectividade e hardware' },
-    'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas in caixas' },
+    'embalagem': { title: 'Módulo de Embalagem', sub: 'Agrupamento de unidades aprovadas em caixas' },
     'embalagem-pallet': { title: 'Processo de Embalagem - Pallet', sub: 'Embalagem rígida por lote com validação de modelo, localidade e etapas' },
     'embalagem-consulta': { title: 'Consulta & Ajustes de Caixas', sub: 'Visualização, inclusão/remoção de unidades e cancelamento/exclusão de caixas' },
+    'embalagem-sucata': { title: 'Módulo de Sucata (Embalagem)', sub: 'Formação de caixas com unidades de sucata / reprovadas (CS)' },
+    'embalagem-pallet-sucata': { title: 'Processo de Embalagem - Pallet de Sucata', sub: 'Paletização de caixas de sucata (PS)' },
+    'embalagem-consulta-sucata': { title: 'Consulta & Ajustes de Sucata', sub: 'Visualização e reimpressão de caixas e pallets de sucata' },
     'expedicao': { title: 'Módulo de Expedição', sub: 'Despacho e expedição de caixas e unidades' },
     'sucata': { title: 'Módulo de Sucata', sub: 'Registro e descarte de equipamentos avariados (sucateamento)' },
     'reparo-eletronico': { title: 'Reparo Eletrônico', sub: 'Apontamento de reparo em placas e componentes' },
@@ -1408,6 +1414,8 @@ function populatePrinterDropdowns() {
   const embSelect = document.getElementById('emb-printer-select');
   const palletSelect = document.getElementById('pallet-printer-select');
   const reimpSelect = document.getElementById('reimp-printer-select');
+  const embSucataSelect = document.getElementById('emb-sucata-printer-select');
+  const reimpSucataSelect = document.getElementById('reimp-printer-sucata-select');
 
   const savedEmbPrinter = localStorage.getItem('wms_selected_printer_emb') || '';
   const savedPalletPrinter = localStorage.getItem('wms_selected_printer_pallet') || '';
@@ -1415,7 +1423,9 @@ function populatePrinterDropdowns() {
   [
     { el: embSelect, saved: savedEmbPrinter },
     { el: palletSelect, saved: savedPalletPrinter },
-    { el: reimpSelect, saved: savedEmbPrinter }
+    { el: reimpSelect, saved: savedEmbPrinter },
+    { el: embSucataSelect, saved: savedEmbPrinter },
+    { el: reimpSucataSelect, saved: savedEmbPrinter }
   ].forEach(({ el, saved }) => {
     if (!el) return;
     el.innerHTML = '<option value="">-- Selecione a Impressora Zebra --</option>';
@@ -1485,10 +1495,10 @@ async function reimprimirEtiquetaCaixa(e) {
 }
 
 function saveSelectedPrinterPreference(viewType) {
-  if (viewType === 'embalagem') {
-    const el = document.getElementById('emb-printer-select');
+  if (viewType === 'embalagem' || viewType === 'embalagem_sucata') {
+    const el = document.getElementById('emb-printer-select') || document.getElementById('emb-sucata-printer-select');
     if (el) localStorage.setItem('wms_selected_printer_emb', el.value);
-  } else if (viewType === 'pallet') {
+  } else if (viewType === 'pallet' || viewType === 'pallet_sucata') {
     const el = document.getElementById('pallet-printer-select');
     if (el) localStorage.setItem('wms_selected_printer_pallet', el.value);
   }
@@ -5558,3 +5568,1351 @@ function importDefectsFromExcel() {
   };
   reader.readAsArrayBuffer(file);
 }
+
+/* ==========================================================================
+   MÓDULO DE SUCATA: CAIXAS (CS...) E PALLET (PS...)
+   ========================================================================== */
+
+/**
+ * Gerador ZPL para Etiqueta de Caixa de Sucata (CS...)
+ * Suporta 300 DPI (Layout Exato) e 203 DPI (Calibrado)
+ */
+function generateZplSucataBoxLabel(caixaId, modelo, units, targetDpi = 300) {
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const dateStr = `${day}/${month}/${year}`;
+
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  const timeStr = `${hours}:${minutes}:${seconds}`;
+
+  const qtdStr = `QTD:${units.length}`;
+  const modeloStr = modelo || (units.length > 0 ? units[0].modelo : 'PRODUTO');
+  const localidadeStr = (units.length > 0 && units[0].localidade) ? units[0].localidade.toUpperCase() : 'GERAL';
+
+  const idList = units.map(u => {
+    const gpon = (u.gpon || '').trim().toUpperCase();
+    const serial = (u.serial || '').trim().toUpperCase();
+    return gpon || serial;
+  }).filter(Boolean);
+
+  const qrData = idList.join('\\0D\\0A') + (idList.length > 0 ? '\\0D\\0A' : '');
+  const boxBarcodeData = caixaId;
+
+  // 203 DPI CALIBRADO PARA SUCATA
+  if (parseInt(targetDpi) === 203 || parseInt(targetDpi) === 200) {
+    return `CT~~CD,~CC^~CT~
+^XA
+~TA000
+~JSN
+^LT0
+^MNN
+^MTT
+^PON
+^PMN
+^LH0,0
+^JMA
+^PR2,2
+~SD25
+^JUS
+^LRN
+^CI27
+^PA0,1,1,0
+^XZ
+^XA
+^MMT
+^PW824
+^LL640
+^LS0
+^FO224,20^GFA,1832,3807,47,:Z64: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:93E0^FS
+^FO7,7^GB810,626,6^FS
+^FO0,124^GB824,0,6^FS
+^FT32,204^A0B,16,16^FH\\^CI28^FD${dateStr}^FS^CI27
+^FT118,198^A0B,16,16^FH\\^CI28^FD${timeStr}^FS^CI27
+^FO40,139^GFA,207,364,7,:Z64:eJxN0DFqxTAQhOExDiidjuCj6FopAvIN3pUMKVzmCn6oSCujIioU/2HXKaJCH2IXwYz0Ij/hZtmcPBwuu2c4bAP6jQ0jsEoJqFLGhhNXhjXQX+GYqYrUwHNT7IHCph754kcj8g19BE643v+YqcZET4y3iSsxujILvSrxyWkf7ob99nFoorAfEo19k3LjsUlL47FKsbCsUihXkjSVkY02cLpHa6e91J6e9ywWUDU4PVTjsnwSeDMe2vjXj7wQyeuR7n15Z1K6C42SfgEC0qVh:8CCA^FS
+^FO0,210^GB824,0,6^FS
+^FO131,127^GB0,87,6^FS
+^FO136,167^GB688,0,6^FS
+^FT143,158^A0N,31,31^FH\\^CI28^FDBOX ID:^FS^CI27
+^BY2,3,24^FT444,161^BCN,,N,N
+^FH\\^FD${boxBarcodeData}^FS
+^FT247,160^A0N,28,29^FH\\^CI28^FD${caixaId}^FS^CI27
+^FT143,202^A0N,28,29^FH\\^CI28^FD${modeloStr}^FS^CI27
+^FO324,171^GB0,41,6^FS
+^FT355,202^A0N,28,29^FH\\^CI28^FDBrasil TecPar^FS^CI27
+^FO1,258^GB824,0,6^FS
+^FT29,250^A0N,28,29^FH\\^CI28^FD${qtdStr}^FS^CI27
+^FO324,213^GB0,51,6^FS
+^FT355,248^A0N,28,29^FH\\^CI28^FD${localidadeStr}^FS^CI27
+^FO285,290^BQN,2,5
+^FH\\^FDLA,${qrData}^FS
+^PQ1,0,1,Y
+^XZ`;
+  }
+
+  // 300 DPI PADRÃO SOLICITADO
+  return `CT~~CD,~CC^~CT~
+^XA
+~TA000
+~JSN
+^LT0
+^MNN
+^MTT
+^PON
+^PMN
+^LH0,0
+^JMA
+^PR6,6
+~SD15
+^JUS
+^LRN
+^CI27
+^PA0,1,1,0
+^XZ
+^XA
+^MMT
+^PW1217
+^LL945
+^LS0
+^FO331,64^GFA,3521,8280,69,:Z64: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:BDDB
+^FO0,226^GFA,41,1520,152,:Z64:eJxjYKAe+D8KRsEoGAWjgKqAikU0AwD/NFL0:7666
+^FT40,406^A0B,33,33^FH\\^CI28^FD${dateStr}^FS^CI27
+^FT179,400^A0B,33,41^FH\\^CI28^FD${timeStr}^FS^CI27
+^FO194,230^GB0,201,9^FS
+^FO201,288^GFA,85,1664,128,:Z64:eJztzbEVABAMRVEqY1ndWKpELYp/NF4Rd4HrvrHymN+Z8K8M+FfoP7D/J/+DCv9Kg3+lw79y/Au5e3K9:3DC8
+^FT211,276^A0N,46,46^FH\\^CI28^FDBOX ID:^FS^CI27
+^BY3,3,35^FT656,280^BCN,,N,N
+^FH\\^FD${boxBarcodeData}^FS
+^FT365,278^A0N,42,43^FH\\^CI28^FD${caixaId}^FS^CI27
+^FT211,342^A0N,42,43^FH\\^CI28^FD${modeloStr}^FS^CI27
+^FO478,295^GB0,61,9^FS
+^FT525,340^A0N,42,43^FH\\^CI28^FDBrasil TecPar^FS^CI27
+^FO1,424^GFA,97,1976,152,:Z64:eJxjYBh4wPgfA/yju43EAfLdRa6N5LuLtjYSB/4NtANwgFF3kQZG3UUaGBTuon+hMADFI9k2ku0uGttIHAAAxaVS6w==:824C
+^FT211,409^A0N,42,43^FH\\^CI28^FD${qtdStr}^FS^CI27
+^FT433,878^BQN,2,7
+^FH\\^FDLA,${qrData}^FS
+^FO48,288^GFA,545,1044,12,:Z64:eJxVk7FtwzAQRSkIhgKkUJlSI2QEjuJRyEBdUniFjJHO8gYZgWVKFikEg+bl3x1JMYRtPHzK/5N3J2OMeTLHOndMoeFAv41nIt/xVtkS7ZUd0aPZYH1WG6yoPDJn5YmZmiXWj/AinJoNlejCW7UhjZ4KP9QmX0v0wqFnjYYWzLtGO7E4STRb49FXTgAPfN8XbIMvdPfmmQKfHhHf+OPGsbO4u6oj1oZRnufz2KZTWiLzKjdWfivM/kF4DnIeJ3rgakZbmM+/iM8m9+LgZDe+b54ka5M6rMLeDE4DotNaBfl6KUTA3o20QDsC1qxF3LE3JuUE/ZK1jwn6lLS/GZ9518Yk/kRtWAbbXRsMfbfaYtZRBh0I6NEpW+ihDNcM/VZmaIa+Fh6hj2XORuiXwgP0qUzKkBeUojF2ysTlZbfZV442VX2OLtepnIKr40ofvo0u4Q6xsh/bO+C2qY063a8Ht8H9z67Oreo9x45D9/zW6b7TzaFnc+ip0/dOb/boWLNHx5o9Otbszam9p1hf8vsHInS8Jg==:C74A
+^FO203,348^GFA,89,1664,128,:Z64:eJz7/x8F/GOgM/hPGvgwwPYTAg0DbD8B8GeA7UcHP0btH+H2owHGAbafEOAfYPsJgfoBtp8AYMawHwD7cXKH:BC5C
+^PQ1,0,1,Y
+^XZ`;
+}
+
+// SEQUÊNCIA DE CAIXA DE SUCATA (CS000000001)
+async function fetchCurrentCaixaSucataCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/caixa-sucata/current');
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    return 'CS000000001';
+  }
+}
+
+async function generateNextCaixaSucataCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/caixa-sucata/next', { method: 'POST' });
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao gerar novo código de caixa de sucata no servidor!");
+    return null;
+  }
+}
+
+async function initEmbalagemSucataView() {
+  await loadStateFromServer();
+  const codeField = document.getElementById('emb-sucata-caixa-id');
+  if (codeField) {
+    const currentBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === codeField.value);
+    if (!codeField.value || currentBoxUnits.length === 0) {
+      codeField.placeholder = "Carregando...";
+      const code = await fetchCurrentCaixaSucataCodeFromServer();
+      codeField.value = code;
+    }
+    updateEmbalagemSucataBoxSummary();
+  }
+  populatePrinterDropdowns();
+}
+
+async function generateNewCaixaSucataCode() {
+  const codeField = document.getElementById('emb-sucata-caixa-id');
+  if (!codeField) return;
+
+  const currentCaixaId = codeField.value.trim().toUpperCase();
+  const currentBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentCaixaId);
+
+  if (currentCaixaId && currentBoxUnits.length === 0) {
+    showToast(`A caixa de sucata ${currentCaixaId} já é uma caixa nova sem unidades associadas.`);
+    return;
+  }
+
+  codeField.placeholder = "Carregando...";
+  const code = await generateNextCaixaSucataCodeFromServer();
+  if (code) {
+    codeField.value = code;
+    updateEmbalagemSucataBoxSummary();
+    showToast(`Nova caixa de sucata ${code} iniciada!`);
+    playSuccessBeep();
+  }
+}
+
+function updateEmbalagemSucataBoxSummary() {
+  const codeField = document.getElementById('emb-sucata-caixa-id');
+  if (!codeField) return;
+  const caixaId = codeField.value.trim().toUpperCase() || 'CS000000001';
+  
+  const codeEl = document.getElementById('current-box-sucata-code');
+  if (codeEl) codeEl.innerText = caixaId;
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  
+  const countEl = document.getElementById('current-box-sucata-count');
+  if (countEl) countEl.innerText = `${boxUnits.length} / 10`;
+
+  const modeloRefEl = document.getElementById('current-box-sucata-modelo');
+  if (modeloRefEl) {
+    modeloRefEl.innerText = boxUnits.length > 0 ? boxUnits[0].modelo : '-';
+  }
+
+  const localidadeRefEl = document.getElementById('current-box-sucata-localidade');
+  if (localidadeRefEl) {
+    localidadeRefEl.innerText = boxUnits.length > 0 ? (boxUnits[0].localidade || '-') : '-';
+  }
+
+  const unitsContainer = document.getElementById('current-box-sucata-units');
+  if (!unitsContainer) return;
+  unitsContainer.innerHTML = '';
+  if (boxUnits.length > 0) {
+    boxUnits.forEach(u => {
+      const chip = document.createElement('div');
+      chip.className = 'box-unit-chip flex-between';
+      chip.style.borderLeft = '3px solid #f87171';
+      chip.innerHTML = `
+        <div>
+          <strong>${u.serial}</strong>
+          <small class="text-muted" style="margin-left: 8px;">GPON: ${u.gpon || '-'}</small>
+          <span class="badge badge-danger" style="margin-left: 8px;">${u.modelo}</span>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removerUnidadeDaCaixa('${caixaId}', '${u.id}')" title="Remover da caixa">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      `;
+      unitsContainer.appendChild(chip);
+    });
+  } else {
+    unitsContainer.innerHTML = '<p class="text-muted text-center">Nenhuma unidade embalada nesta caixa de sucata ainda.</p>';
+  }
+}
+
+// FILA SEQUENCIAL DE BIPAGEM RÁPIDA (CAIXAS DE SUCETA)
+let isProcessingEmbalagemSucataScan = false;
+const embalagemSucataScanQueue = [];
+
+async function processEmbalarUnidadeSucata(e) {
+  e.preventDefault();
+  const caixaIdInput = document.getElementById('emb-sucata-caixa-id');
+  const serialInput = document.getElementById('emb-sucata-serial');
+  if (!caixaIdInput || !serialInput) return;
+
+  const caixaId = caixaIdInput.value.trim().toUpperCase();
+  const rawSerial = serialInput.value.trim().toUpperCase();
+  if (!rawSerial) return;
+
+  serialInput.value = '';
+
+  embalagemSucataScanQueue.push({ serial: rawSerial, caixaId });
+  if (isProcessingEmbalagemSucataScan) return;
+  isProcessingEmbalagemSucataScan = true;
+
+  while (embalagemSucataScanQueue.length > 0) {
+    const item = embalagemSucataScanQueue.shift();
+    await executarEmbalarUnidadeSucataItem(item.serial, item.caixaId);
+  }
+
+  isProcessingEmbalagemSucataScan = false;
+}
+
+async function executarEmbalarUnidadeSucataItem(serial, caixaId) {
+  let unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+
+  // Se não encontrar a unidade no banco local, busca do servidor ou cria temporariamente para sucata
+  if (!unit) {
+    try {
+      await loadStateFromServer();
+      unit = appState.units.find(u => u.serial === serial || u.gpon === serial || u.mac === serial);
+    } catch (err) {}
+  }
+
+  if (!unit) {
+    // Para sucata sem travas, se a unidade ainda não existir no cadastro, gera registro básico
+    unit = {
+      id: 'SUC-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      serial: serial,
+      gpon: serial,
+      mac: '',
+      modelo: 'SUCATA',
+      localidade: 'GERAL',
+      operador: appState.currentUser ? appState.currentUser.login : 'OPERADOR',
+      dataRecebimento: new Date().toISOString().slice(0, 10),
+      status: 'SUCATA',
+      historico: []
+    };
+    appState.units.push(unit);
+  }
+
+  // Verificar se a unidade já foi embalada nesta ou em outra caixa
+  if (unit.embalagem && unit.embalagem.caixaId) {
+    if (unit.embalagem.caixaId === caixaId) {
+      updateEmbalagemSucataBoxSummary();
+      showToast(`A unidade [${unit.serial}] já está nesta caixa de sucata!`);
+      playSuccessBeep();
+      return;
+    }
+    playErrorBeep();
+    alert(`Esta unidade já foi embalada anteriormente na caixa: ${unit.embalagem.caixaId}!`);
+    return;
+  }
+
+  // Verificar capacidade máxima (10 unidades)
+  const existingBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  if (existingBoxUnits.length >= 10) {
+    playErrorBeep();
+    alert(`A caixa de sucata [${caixaId}] já atingiu 10 unidades! Feche a caixa para iniciar uma nova.`);
+    return;
+  }
+
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  const embalagemData = {
+    caixaId,
+    data: dateStr,
+    operador: appState.currentUser ? appState.currentUser.login : 'OPERADOR',
+    sucata: true
+  };
+
+  registrarEventoHistorico(unit, {
+    tipo: 'EMBALAGEM_SUCATA',
+    titulo: `Embalado na Caixa de Sucata [${caixaId}]`,
+    descricao: `Unidade embalada na caixa de sucata [${caixaId}] pelo operador [${embalagemData.operador}]`,
+    operador: embalagemData.operador,
+    data: dateStr,
+    statusAnterior: unit.status,
+    statusNovo: 'SUCATA',
+    extra: embalagemData
+  });
+
+  // ATUALIZAÇÃO ATÔMICA IMEDIATA NO ESTADO LOCAL E NA TELA
+  unit.embalagem = embalagemData;
+  unit.status = 'SUCATA';
+  saveStateToStorage();
+
+  playSuccessBeep();
+  updateEmbalagemSucataBoxSummary();
+
+  const updatedBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa de sucata ${caixaId}! [${updatedBoxUnits.length}/10]`);
+
+  // PERSISTÊNCIA ASSÍNCRONA NO SERVIDOR
+  try {
+    fetch(`/api/units/${unit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'SUCATA',
+        embalagem: embalagemData,
+        historico: unit.historico
+      })
+    }).catch(err => console.error("Erro ao sincronizar sucata com servidor:", err));
+  } catch (err) {}
+
+  // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades
+  if (updatedBoxUnits.length >= 10) {
+    setTimeout(async () => {
+      await fecharCaixaEmbalagemSucata(caixaId);
+    }, 300);
+  }
+}
+
+function abrirModalConteudoCaixaSucata() {
+  const codeField = document.getElementById('emb-sucata-caixa-id');
+  if (!codeField) return;
+  const caixaId = codeField.value.trim().toUpperCase();
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  if (boxUnits.length === 0) {
+    alert(`Nenhuma unidade embalada na caixa ${caixaId} ainda.`);
+    return;
+  }
+
+  document.getElementById('modal-box-units-title').innerText = `Conteúdo da Caixa de Sucata: ${caixaId}`;
+  const tbody = document.getElementById('tbody-modal-box-units');
+  if (tbody) {
+    tbody.innerHTML = boxUnits.map((u, idx) => `
+      <tr>
+        <td><strong>#${idx + 1}</strong></td>
+        <td><strong>${u.serial}</strong></td>
+        <td>${u.gpon || '-'}</td>
+        <td>${u.mac || '-'}</td>
+        <td><span class="badge badge-danger">${u.modelo}</span></td>
+        <td>${u.localidade || '-'}</td>
+        <td>${u.embalagem ? u.embalagem.data : '-'}</td>
+        <td>${u.embalagem ? u.embalagem.operador : '-'}</td>
+      </tr>
+    `).join('');
+  }
+  document.getElementById('modal-box-units').classList.remove('hidden');
+}
+
+function solicitarFechamentoManualCaixaSucata() {
+  const caixaId = document.getElementById('emb-sucata-caixa-id').value.trim().toUpperCase();
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert("Não há nenhuma unidade embalada nesta caixa de sucata para fechar.");
+    return;
+  }
+
+  if (isCaixaJaFechadaEImpressa(caixaId)) {
+    playErrorBeep();
+    alert(`A caixa de sucata [${caixaId}] já foi FECHADA anteriormente!`);
+    return;
+  }
+
+  fecharCaixaEmbalagemSucata(caixaId);
+}
+
+async function fecharCaixaEmbalagemSucata(caixaId) {
+  if (isCaixaJaFechadaEImpressa(caixaId)) {
+    playErrorBeep();
+    alert(`A etiqueta da caixa de sucata [${caixaId}] já foi impressa!`);
+    return;
+  }
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  const modelo = boxUnits.length > 0 ? boxUnits[0].modelo : 'SUCATA';
+
+  caixasImpressasSet.add(caixaId);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  for (const u of boxUnits) {
+    if (u.embalagem) {
+      u.embalagem.fechada = true;
+      registrarEventoHistorico(u, {
+        tipo: 'FECHAMENTO_CAIXA_SUCATA',
+        titulo: `Caixa de Sucata [${caixaId}] Fechada`,
+        descricao: `Caixa de sucata [${caixaId}] finalizada com ${boxUnits.length} unidade(s) e etiqueta ZPL gerada.`,
+        operador: userAtual,
+        statusNovo: 'SUCATA',
+        extra: { caixaId, totalUnidades: boxUnits.length }
+      });
+
+      fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'SUCATA',
+          embalagem: u.embalagem,
+          historico: u.historico
+        })
+      }).catch(err => console.error(err));
+    }
+  }
+
+  syncCaixaWithServer(caixaId);
+
+  // Determinar a resolução da impressora selecionada (300 DPI ou 203 DPI)
+  const selectedPrinterId = localStorage.getItem('wms_selected_printer_emb') || 
+                            (appState.printers.length > 0 ? appState.printers[0].id : null);
+  const printer = appState.printers.find(p => p.id === selectedPrinterId);
+  const targetDpi = printer ? (printer.dpi || 300) : 300;
+
+  // Gerar o ZPL de Sucata
+  lastGeneratedZpl = generateZplSucataBoxLabel(caixaId, modelo, boxUnits, targetDpi);
+  lastGeneratedBoxId = caixaId;
+  lastGeneratedBoxUnits = boxUnits;
+  lastGeneratedBoxModelo = modelo;
+
+  showZplModal(caixaId, modelo, boxUnits);
+  playSuccessBeep();
+
+  // Disparar impressão na Zebra
+  imprimirZplDiretoImpressora();
+
+  // Iniciar próxima caixa de sucata
+  await generateNewCaixaSucataCode();
+}
+
+// SEQUÊNCIA DE PALLET DE SUCATA (PS0000000001)
+async function fetchCurrentPalletSucataCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/pallet-sucata/current');
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    return 'PS0000000001';
+  }
+}
+
+async function generateNextPalletSucataCodeFromServer() {
+  try {
+    const res = await fetch('/api/sequence/pallet-sucata/next', { method: 'POST' });
+    if (!res.ok) throw new Error("Erro de resposta");
+    const data = await res.json();
+    return data.formatted;
+  } catch (err) {
+    console.error(err);
+    alert("Erro ao gerar novo código de pallet de sucata no servidor!");
+    return null;
+  }
+}
+
+async function initPalletSucataView() {
+  await loadStateFromServer();
+  const codeField = document.getElementById('pallet-sucata-code-id');
+  if (codeField) {
+    const currentPalletUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === codeField.value);
+    if (!codeField.value || currentPalletUnits.length === 0) {
+      codeField.placeholder = "Carregando...";
+      const code = await fetchCurrentPalletSucataCodeFromServer();
+      codeField.value = code;
+    }
+    updatePalletSucataSummary();
+  }
+  carregarListaTodosPalletsSucata();
+  populatePrinterDropdowns();
+}
+
+async function generateNewPalletSucataCode() {
+  const codeField = document.getElementById('pallet-sucata-code-id');
+  if (!codeField) return;
+
+  const currentPalletId = codeField.value.trim().toUpperCase();
+  const currentPalletUnits = appState.units.filter(u => u.pallet && u.pallet.palletId === currentPalletId);
+  if (currentPalletId && currentPalletUnits.length === 0) {
+    showToast(`O Pallet de Sucata ${currentPalletId} já é um pallet novo sem caixas associadas.`);
+    return;
+  }
+
+  codeField.placeholder = "Carregando...";
+  const code = await generateNextPalletSucataCodeFromServer();
+  if (code) {
+    codeField.value = code;
+    updatePalletSucataSummary();
+    carregarListaTodosPalletsSucata();
+    showToast(`Novo Pallet de Sucata ${code} iniciado com sucesso!`);
+    playSuccessBeep();
+  }
+}
+
+function obterCaixasDoPalletSucata(palletId) {
+  if (!palletId) return [];
+  const normalizedPalletId = String(palletId).trim().toUpperCase();
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === normalizedPalletId);
+  const caixasMap = {};
+
+  unitsInPallet.forEach(u => {
+    const cId = (u.embalagem && u.embalagem.caixaId) ? String(u.embalagem.caixaId).trim().toUpperCase() : 'SEM_CAIXA';
+    if (!caixasMap[cId]) {
+      caixasMap[cId] = {
+        caixaId: cId,
+        modelo: u.modelo || '-',
+        localidade: u.localidade || '-',
+        data: (u.embalagem && u.embalagem.data) ? u.embalagem.data : (u.pallet ? u.pallet.data : '-'),
+        unidades: []
+      };
+    }
+    caixasMap[cId].unidades.push(u);
+  });
+
+  return Object.values(caixasMap);
+}
+
+function updatePalletSucataSummary() {
+  const codeField = document.getElementById('pallet-sucata-code-id');
+  if (!codeField) return;
+  const palletId = codeField.value.trim().toUpperCase() || 'PS0000000001';
+
+  const statCodeEl = document.getElementById('pallet-sucata-stat-code');
+  if (statCodeEl) statCodeEl.innerText = palletId;
+
+  const caixas = obterCaixasDoPalletSucata(palletId);
+  const totalUnits = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === palletId).length;
+
+  const statCountEl = document.getElementById('pallet-sucata-stat-count');
+  if (statCountEl) statCountEl.innerText = `${caixas.length} / 40 Caixas`;
+
+  const statUnitsEl = document.getElementById('pallet-sucata-stat-total-unidades');
+  if (statUnitsEl) statUnitsEl.innerText = `${totalUnits} Unidades`;
+
+  const isFechado = caixas.length >= 40 || palletsFechadosSet.has(palletId) || (caixas.length > 0 && caixas.every(c => c.unidades.every(u => u.pallet && u.pallet.fechado)));
+  const statusEl = document.getElementById('pallet-sucata-stat-status');
+  if (statusEl) {
+    statusEl.innerHTML = isFechado 
+      ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>' 
+      : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>';
+  }
+
+  const modeloEl = document.getElementById('pallet-sucata-stat-modelo');
+  if (modeloEl) {
+    modeloEl.innerText = caixas.length > 0 ? caixas[0].modelo : '-';
+  }
+
+  const locEl = document.getElementById('pallet-sucata-stat-localidade');
+  if (locEl) {
+    locEl.innerText = caixas.length > 0 ? caixas[0].localidade : '-';
+  }
+
+  const listContainer = document.getElementById('pallet-sucata-box-list-container');
+  if (!listContainer) return;
+
+  if (caixas.length === 0) {
+    listContainer.innerHTML = '<p class="text-muted text-center">Nenhuma caixa adicionada a este pallet de sucata ainda.</p>';
+  } else {
+    listContainer.innerHTML = caixas.map(c => `
+      <div class="box-unit-chip flex-between" style="padding: 8px 12px; margin-bottom: 6px; background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(248, 113, 113, 0.3);">
+        <div>
+          <strong style="color: #f87171;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong>
+          <span class="badge badge-danger" style="margin-left: 8px;">${c.modelo}</span>
+          <small class="text-muted" style="margin-left: 8px;">${c.localidade}</small>
+          <span class="badge badge-success" style="margin-left: 8px;">${c.unidades.length} un</span>
+        </div>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removerCaixaDoPalletSucataDireto('${palletId}', '${c.caixaId}')" title="Remover esta caixa do pallet de sucata">
+          <i class="fa-solid fa-times"></i>
+        </button>
+      </div>
+    `).join('');
+  }
+}
+
+async function sincronizarPalletSucataManualmente() {
+  showToast("Sincronizando dados de sucata com o servidor...");
+  await loadStateFromServer();
+  updatePalletSucataSummary();
+  carregarListaTodosPalletsSucata();
+  showToast("Dados do Pallet de Sucata atualizados com sucesso!");
+  playSuccessBeep();
+}
+
+// FILA SEQUENCIAL DE PALLETIZAÇÃO DE SUCATA
+let isProcessingPalletSucataScan = false;
+const palletSucataScanQueue = [];
+
+async function processPalletSucataCaixa(e) {
+  e.preventDefault();
+  const palletIdEl = document.getElementById('pallet-sucata-code-id');
+  const inputEl = document.getElementById('pallet-sucata-caixa-input');
+  if (!palletIdEl || !inputEl) return;
+
+  const palletId = palletIdEl.value.trim().toUpperCase();
+  const rawInput = inputEl.value.trim().toUpperCase();
+  if (!rawInput) return;
+
+  inputEl.value = '';
+
+  palletSucataScanQueue.push({ inputVal: rawInput, palletId });
+  if (isProcessingPalletSucataScan) return;
+  isProcessingPalletSucataScan = true;
+
+  while (palletSucataScanQueue.length > 0) {
+    const item = palletSucataScanQueue.shift();
+    await executarPalletSucataCaixaItem(item.inputVal, item.palletId);
+  }
+
+  isProcessingPalletSucataScan = false;
+}
+
+async function executarPalletSucataCaixaItem(inputVal, palletId) {
+  if (!palletId) {
+    playErrorBeep();
+    alert("Código do Pallet de Sucata inválido!");
+    return;
+  }
+
+  const normalizedPalletId = palletId.trim().toUpperCase();
+  const normalizedInput = inputVal.trim().toUpperCase();
+
+  const caixasNoPallet = obterCaixasDoPalletSucata(normalizedPalletId);
+  if (caixasNoPallet.length >= 40) {
+    playErrorBeep();
+    alert(`O Pallet de Sucata [${normalizedPalletId}] já atingiu a capacidade máxima de 40 caixas!`);
+    return;
+  }
+
+  let targetCaixaId = normalizedInput;
+  let boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
+
+  if (boxUnits.length === 0) {
+    const singleUnit = appState.units.find(u => (u.serial === normalizedInput || u.gpon === normalizedInput || u.mac === normalizedInput) && u.embalagem);
+    if (singleUnit) {
+      targetCaixaId = String(singleUnit.embalagem.caixaId).trim().toUpperCase();
+      boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
+    }
+  }
+
+  if (boxUnits.length === 0) {
+    try {
+      await loadStateFromServer();
+      boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === targetCaixaId);
+    } catch (e) {}
+  }
+
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert(`Nenhuma caixa de sucata encontrada para o termo: "${normalizedInput}".`);
+    return;
+  }
+
+  const jaPaletizada = boxUnits.some(u => u.pallet && u.pallet.palletId);
+  if (jaPaletizada) {
+    const existingPallet = boxUnits.find(u => u.pallet && u.pallet.palletId).pallet.palletId;
+    const normExistingPallet = String(existingPallet).trim().toUpperCase();
+
+    if (normExistingPallet === normalizedPalletId) {
+      updatePalletSucataSummary();
+      carregarListaTodosPalletsSucata();
+      playSuccessBeep();
+      showToast(`A caixa [${targetCaixaId}] já está adicionada neste Pallet de Sucata (${normalizedPalletId}).`);
+      return;
+    }
+
+    playErrorBeep();
+    alert(`BLOQUEIO DE DUPLICIDADE:\nA caixa [${targetCaixaId}] já está vinculada ao Pallet [${existingPallet}]!`);
+    return;
+  }
+
+  const caixaRegional = boxUnits[0].localidade || 'GERAL';
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
+  const palletData = {
+    palletId: normalizedPalletId,
+    data: dateStr,
+    operador: userAtual,
+    fechado: false,
+    sucata: true
+  };
+
+  // ATUALIZAÇÃO ATÔMICA IMEDIATA
+  for (const u of boxUnits) {
+    u.pallet = palletData;
+    registrarEventoHistorico(u, {
+      tipo: 'PALLETIZACAO_SUCATA',
+      titulo: `Caixa [${targetCaixaId}] vinculada ao Pallet de Sucata [${normalizedPalletId}]`,
+      descricao: `Caixa [${targetCaixaId}] adicionada ao Pallet de Sucata [${normalizedPalletId}] pelo operador [${userAtual}]`,
+      operador: userAtual,
+      data: dateStr,
+      statusNovo: 'SUCATA',
+      extra: { palletId: normalizedPalletId, caixaId: targetCaixaId }
+    });
+  }
+
+  saveStateToStorage();
+  playSuccessBeep();
+
+  updatePalletSucataSummary();
+  carregarListaTodosPalletsSucata();
+
+  const updatedCaixas = obterCaixasDoPalletSucata(normalizedPalletId);
+  showToast(`Caixa ${targetCaixaId} (${boxUnits.length} un) adicionada ao Pallet de Sucata ${normalizedPalletId}! [${updatedCaixas.length}/40]`);
+
+  // PERSISTÊNCIA NO BACKEND
+  try {
+    Promise.all(boxUnits.map(u => 
+      fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'SUCATA',
+          pallet: palletData,
+          historico: u.historico
+        })
+      })
+    )).catch(err => console.error("Erro ao persistir pallet de sucata:", err));
+  } catch (err) {}
+
+  // Fechamento automático ao atingir 40 caixas
+  if (updatedCaixas.length >= 40) {
+    setTimeout(async () => {
+      await fecharPalletSucata(normalizedPalletId);
+    }, 300);
+  }
+}
+
+async function removerCaixaDoPalletSucataDireto(palletId, caixaId) {
+  if (!confirm(`Deseja realmente remover a Caixa [${caixaId}] do Pallet de Sucata [${palletId}]?`)) {
+    return;
+  }
+
+  const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId && u.pallet && u.pallet.palletId === palletId);
+  for (const u of boxUnits) {
+    u.pallet = null;
+    fetch(`/api/units/${u.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'SUCATA',
+        pallet: null,
+        historico: u.historico
+      })
+    }).catch(err => console.error(err));
+  }
+
+  saveStateToStorage();
+  updatePalletSucataSummary();
+  carregarListaTodosPalletsSucata();
+  showToast(`Caixa ${caixaId} removida do pallet de sucata com sucesso.`);
+  playSuccessBeep();
+}
+
+function solicitarFechamentoManualPalletSucata() {
+  const palletId = document.getElementById('pallet-sucata-code-id').value.trim().toUpperCase();
+  const caixas = obterCaixasDoPalletSucata(palletId);
+
+  if (caixas.length === 0) {
+    playErrorBeep();
+    alert("Não há nenhuma caixa associada a este pallet de sucata para fechar.");
+    return;
+  }
+
+  if (confirm(`Deseja realmente fechar o Pallet de Sucata [${palletId}] contendo ${caixas.length} caixas?`)) {
+    fecharPalletSucata(palletId);
+  }
+}
+
+async function fecharPalletSucata(palletId) {
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === String(palletId).trim().toUpperCase());
+  palletsFechadosSet.add(palletId);
+
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+  const now = new Date();
+  const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+
+  for (const u of unitsInPallet) {
+    if (u.pallet) {
+      u.pallet.fechado = true;
+      registrarEventoHistorico(u, {
+        tipo: 'FECHAMENTO_PALLET_SUCATA',
+        titulo: `Pallet de Sucata [${palletId}] Fechado`,
+        descricao: `Pallet de sucata [${palletId}] finalizado com sucesso contendo ${obterCaixasDoPalletSucata(palletId).length} caixas.`,
+        operador: userAtual,
+        data: dateStr,
+        statusNovo: 'SUCATA',
+        extra: { palletId }
+      });
+
+      fetch(`/api/units/${u.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'SUCATA',
+          pallet: u.pallet,
+          historico: u.historico
+        })
+      }).catch(err => console.error(err));
+    }
+  }
+
+  playSuccessBeep();
+  showToast(`Pallet de Sucata ${palletId} fechado com sucesso!`);
+  updatePalletSucataSummary();
+  carregarListaTodosPalletsSucata();
+
+  await generateNewPalletSucataCode();
+}
+
+function imprimirFolhaA4PalletSucataAtual() {
+  const codeField = document.getElementById('pallet-sucata-code-id');
+  if (!codeField) return;
+  const palletId = codeField.value.trim().toUpperCase();
+  if (!palletId) {
+    alert("Código de Pallet de Sucata inválido!");
+    return;
+  }
+  imprimirFolhaA4PalletSucata(palletId);
+}
+
+function imprimirFolhaA4PalletSucata(palletId) {
+  if (!palletId) {
+    alert("Pallet não selecionado!");
+    return;
+  }
+
+  const caixas = obterCaixasDoPalletSucata(palletId);
+  const unitsInPallet = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === String(palletId).trim().toUpperCase());
+
+  if (caixas.length === 0 || unitsInPallet.length === 0) {
+    playErrorBeep();
+    alert(`O Pallet de Sucata [${palletId}] não possui nenhuma caixa bipada para impressão!`);
+    return;
+  }
+
+  const modelo = caixas[0].modelo || 'SUCATA';
+  const regional = caixas[0].localidade || 'REGIONAL';
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const dia = pad(now.getDate());
+  const mes = pad(now.getMonth() + 1);
+  const ano = now.getFullYear();
+  const hora = pad(now.getHours());
+  const min = pad(now.getMinutes());
+  const seg = pad(now.getSeconds());
+  const dataHoraFormatada = `${dia}/${mes}/${ano} ${hora}:${min}:${seg}`;
+
+  const totalUnidades = unitsInPallet.length;
+
+  const caixasHtml = caixas.map(c => `
+    <div class="box-chip" style="background: #fee2e2; border-color: #ef4444; color: #991b1b;">${c.caixaId}</div>
+  `).join('');
+
+  const barcodeSvgHtml = generateCode128SvgHtml(palletId, 68, 3.2);
+
+  const printWindow = window.open('', '_blank', 'width=1100,height=850');
+  if (!printWindow) {
+    alert("Por favor, permita pop-ups no navegador para abrir a folha de impressão!");
+    return;
+  }
+
+  const printHtml = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Identificação do Pallet de Sucata - ${palletId}</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', 'Helvetica', sans-serif;
+    }
+    body {
+      background-color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0;
+      margin: 0;
+    }
+    .no-print {
+      padding: 12px;
+      text-align: center;
+      background: #7f1d1d;
+      width: 100%;
+    }
+    .btn-print {
+      background-color: #dc2626;
+      color: #fff;
+      border: none;
+      padding: 10px 26px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .btn-print:hover {
+      background-color: #b91c1c;
+    }
+    .page-a4 {
+      width: 297mm;
+      height: 200mm;
+      background: white;
+      padding: 8mm 14mm;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      overflow: hidden;
+    }
+    .header-logo {
+      position: absolute;
+      top: 8mm;
+      right: 14mm;
+    }
+    .header-logo img {
+      height: 42px;
+      width: auto;
+    }
+    .pallet-header {
+      text-align: center;
+      margin-top: 1mm;
+      margin-bottom: 5mm;
+    }
+    .pallet-title {
+      font-size: 34pt;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: #dc2626;
+      line-height: 1;
+    }
+    .pallet-code {
+      font-size: 52pt;
+      font-weight: 900;
+      letter-spacing: 3px;
+      color: #000;
+      margin: 2px 0 4px 0;
+      line-height: 1;
+    }
+    .barcode-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-top: 4px;
+    }
+    .barcode-container svg {
+      max-width: 520px;
+      height: 68px;
+    }
+    
+    .content-grid {
+      display: flex;
+      gap: 12mm;
+      margin-top: 2mm;
+      flex: 1;
+    }
+    
+    .card-lote {
+      flex: 1;
+      border: 2.5px solid #dc2626;
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      background: #fdfdfd;
+    }
+    .data-group {
+      margin-bottom: 10px;
+    }
+    .data-group:last-child {
+      margin-bottom: 0;
+    }
+    .data-label {
+      font-size: 10.5pt;
+      font-weight: 800;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+      letter-spacing: 1px;
+    }
+    .data-value-model {
+      font-size: 22pt;
+      font-weight: 900;
+      color: #000;
+      line-height: 1.1;
+    }
+    .data-value-region {
+      font-size: 16pt;
+      font-weight: 800;
+      color: #000;
+      line-height: 1.2;
+    }
+    .data-value-units {
+      font-size: 24pt;
+      font-weight: 900;
+      color: #dc2626;
+      letter-spacing: 1px;
+    }
+    
+    .card-caixas {
+      flex: 1.6;
+      border: 2.5px solid #dc2626;
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      background: #fdfdfd;
+    }
+    .caixas-header {
+      font-size: 16pt;
+      font-weight: 900;
+      color: #dc2626;
+      text-align: center;
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 2px solid #dc2626;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .caixas-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 3px 5px;
+      width: 100%;
+    }
+    .box-chip {
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 9.5pt;
+      font-weight: 900;
+      border-radius: 3px;
+      padding: 2.5px 2px;
+      text-align: center;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+    
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 0;
+      }
+      body {
+        background: none;
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-a4 {
+        width: 100vw;
+        height: 100vh;
+        box-shadow: none;
+        padding: 8mm 14mm;
+        page-break-after: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print">
+    <button class="btn-print" onclick="window.print()">
+      🖨️ Imprimir Folha A4 do Pallet de Sucata (${palletId})
+    </button>
+  </div>
+
+  <div class="page-a4">
+    <div class="header-logo">
+      <img src="img/ctdi-logo.png" alt="CTDI" onerror="this.style.display='none'">
+    </div>
+
+    <div class="pallet-header">
+      <div class="pallet-title">PALLET DE SUCATA #</div>
+      <div class="pallet-code">${palletId}</div>
+      <div class="barcode-container">
+        ${barcodeSvgHtml}
+      </div>
+    </div>
+
+    <div class="content-grid">
+      <div class="card-lote">
+        <div class="data-group">
+          <div class="data-label">Modelo do Equipamento:</div>
+          <div class="data-value-model">${modelo}</div>
+        </div>
+        <div class="data-group">
+          <div class="data-label">Regional / Data e Hora:</div>
+          <div class="data-value-region">${regional}</div>
+          <div style="font-size: 12pt; font-weight: 700; color: #333; margin-top: 2px;">${dataHoraFormatada}</div>
+        </div>
+        <div class="data-group">
+          <div class="data-label">Total de Unidades (Sucata):</div>
+          <div class="data-value-units">${totalUnidades} UNIDADES</div>
+        </div>
+      </div>
+
+      <div class="card-caixas">
+        <div class="caixas-header">Número das Caixas de Sucata (${caixas.length})</div>
+        <div class="caixas-grid">
+          ${caixasHtml}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        window.print();
+      }, 400);
+    });
+  <\/script>
+</body>
+</html>
+  `;
+
+  printWindow.document.open();
+  printWindow.document.write(printHtml);
+  printWindow.document.close();
+}
+
+function carregarListaTodosPalletsSucata() {
+  const tbody = document.getElementById('tbody-todos-pallets-sucata');
+  if (!tbody) return;
+
+  const palletsMap = {};
+  appState.units.filter(u => u.pallet && u.pallet.palletId && String(u.pallet.palletId).startsWith('PS')).forEach(u => {
+    const pId = u.pallet.palletId;
+    if (!palletsMap[pId]) {
+      palletsMap[pId] = {
+        palletId: pId,
+        regional: u.localidade || '-',
+        modelo: u.modelo || '-',
+        data: u.pallet.data || '-',
+        fechado: u.pallet.fechado === true,
+        unidades: []
+      };
+    }
+    palletsMap[pId].unidades.push(u);
+  });
+
+  const palletsList = Object.values(palletsMap);
+  if (palletsList.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum pallet de sucata registrado ainda.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = palletsList.map(p => {
+    const caixas = obterCaixasDoPalletSucata(p.palletId);
+    const statusBadge = p.fechado 
+      ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADO</span>' 
+      : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTO</span>';
+    return `
+      <tr>
+        <td><strong style="color: #f87171;">${p.palletId}</strong></td>
+        <td>${p.regional}</td>
+        <td><strong>${caixas.length}</strong></td>
+        <td>${p.unidades.length} un</td>
+        <td>${statusBadge}</td>
+        <td>${p.data}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletSucata('${p.palletId}')" title="Imprimir Folha A4 deste Pallet de Sucata">
+            <i class="fa-solid fa-print"></i> A4
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function initEmbalagemConsultaSucataView() {
+  carregarListaTodasCaixasSucata();
+}
+
+function carregarListaTodasCaixasSucata() {
+  const selectEl = document.getElementById('ajuste-caixas-sucata-select');
+  const tbody = document.getElementById('tbody-todas-caixas-sucata');
+
+  const caixasMap = {};
+  appState.units.filter(u => u.embalagem && u.embalagem.caixaId && String(u.embalagem.caixaId).startsWith('CS')).forEach(u => {
+    const cId = u.embalagem.caixaId;
+    if (!caixasMap[cId]) {
+      caixasMap[cId] = {
+        caixaId: cId,
+        modelo: u.modelo || '-',
+        localidade: u.localidade || '-',
+        data: u.embalagem.data || '-',
+        fechada: u.embalagem.fechada === true,
+        unidades: []
+      };
+    }
+    caixasMap[cId].unidades.push(u);
+  });
+
+  const caixasList = Object.values(caixasMap);
+
+  if (selectEl) {
+    selectEl.innerHTML = '<option value="">-- Selecione uma Caixa de Sucata --</option>';
+    caixasList.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.caixaId;
+      opt.innerText = `${c.caixaId} - ${c.modelo} (${c.unidades.length} un) [${c.fechada ? 'FECHADA' : 'ABERTA'}]`;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  if (tbody) {
+    if (caixasList.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhuma caixa de sucata registrada ainda.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = caixasList.map(c => `
+      <tr>
+        <td><strong style="color: #f87171;">${c.caixaId}</strong></td>
+        <td>${c.modelo}</td>
+        <td>${c.localidade}</td>
+        <td><strong>${c.unidades.length} / 10</strong></td>
+        <td>${c.fechada ? '<span class="badge badge-success">FECHADA</span>' : '<span class="badge badge-warning">ABERTA</span>'}</td>
+        <td>${c.data}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="reimprimirEtiquetaCaixaSucataDireto('${c.caixaId}')" title="Reimprimir Etiqueta ZPL desta Caixa de Sucata">
+            <i class="fa-solid fa-print"></i>
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+}
+
+function buscarCaixaSucataParaAjuste() {
+  const query = document.getElementById('ajuste-caixa-sucata-search').value.trim().toUpperCase();
+  if (!query) {
+    alert("Informe o código da caixa de sucata (CS...) ou serial!");
+    return;
+  }
+  selecionarCaixaSucataRapida(query);
+}
+
+function selecionarCaixaSucataRapida(caixaId) {
+  if (!caixaId) return;
+  reimprimirEtiquetaCaixaSucataDireto(caixaId);
+}
+
+function reimprimirEtiquetaCaixaSucata(e) {
+  if (e) e.preventDefault();
+  const query = document.getElementById('reimp-caixa-sucata-id').value.trim().toUpperCase();
+  if (!query) {
+    alert("Informe o código da caixa (CS...) ou serial!");
+    return;
+  }
+  reimprimirEtiquetaCaixaSucataDireto(query);
+}
+
+function reimprimirEtiquetaCaixaSucataDireto(query) {
+  let targetCaixaId = query;
+  let boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+
+  if (boxUnits.length === 0) {
+    const singleUnit = appState.units.find(u => (u.serial === query || u.gpon === query || u.mac === query) && u.embalagem);
+    if (singleUnit) {
+      targetCaixaId = singleUnit.embalagem.caixaId;
+      boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === targetCaixaId);
+    }
+  }
+
+  if (boxUnits.length === 0) {
+    playErrorBeep();
+    alert(`Nenhuma caixa de sucata encontrada para "${query}".`);
+    return;
+  }
+
+  const modelo = boxUnits[0].modelo || 'SUCATA';
+  const selectedPrinterId = localStorage.getItem('wms_selected_printer_emb') || 
+                            (appState.printers.length > 0 ? appState.printers[0].id : null);
+  const printer = appState.printers.find(p => p.id === selectedPrinterId);
+  const targetDpi = printer ? (printer.dpi || 300) : 300;
+
+  lastGeneratedZpl = generateZplSucataBoxLabel(targetCaixaId, modelo, boxUnits, targetDpi);
+  lastGeneratedBoxId = targetCaixaId;
+  lastGeneratedBoxUnits = boxUnits;
+  lastGeneratedBoxModelo = modelo;
+
+  showZplModal(targetCaixaId, modelo, boxUnits);
+  playSuccessBeep();
+  showToast(`Caixa de sucata ${targetCaixaId} carregada para reimpressão!`);
+}
+

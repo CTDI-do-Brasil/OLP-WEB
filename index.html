@@ -182,6 +182,7 @@
               <i class="fa-solid fa-chevron-down accordion-icon"></i>
             </div>
             <div class="accordion-content hidden" id="embalagem-submenu">
+              <div style="font-size: 0.72rem; font-weight: 700; color: #94a3b8; padding: 4px 14px 2px; text-transform: uppercase; letter-spacing: 0.5px;">Aprovados</div>
               <a href="#embalagem" class="nav-item nav-sub" onclick="navigate('embalagem')">
                 <i class="fa-solid fa-box"></i>
                 <span>Formar Caixa</span>
@@ -193,6 +194,19 @@
               <a href="#embalagem-consulta" class="nav-item nav-sub" onclick="navigate('embalagem-consulta')">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <span>Consulta / Ajustes</span>
+              </a>
+              <div style="font-size: 0.72rem; font-weight: 700; color: #f87171; padding: 8px 14px 2px; text-transform: uppercase; letter-spacing: 0.5px; border-top: 1px solid rgba(255,255,255,0.08);">Sucata</div>
+              <a href="#embalagem-sucata" class="nav-item nav-sub" onclick="navigate('embalagem-sucata')">
+                <i class="fa-solid fa-box" style="color: #f87171;"></i>
+                <span>Formar Caixa (Sucata)</span>
+              </a>
+              <a href="#embalagem-pallet-sucata" class="nav-item nav-sub" onclick="navigate('embalagem-pallet-sucata')">
+                <i class="fa-solid fa-pallet" style="color: #f87171;"></i>
+                <span>Pallet de Sucata</span>
+              </a>
+              <a href="#embalagem-consulta-sucata" class="nav-item nav-sub" onclick="navigate('embalagem-consulta-sucata')">
+                <i class="fa-solid fa-magnifying-glass" style="color: #f87171;"></i>
+                <span>Consulta Sucata</span>
               </a>
             </div>
           </div>
@@ -1519,6 +1533,287 @@
           </div>
         </section>
 
+        <!-- 8.7 FORMAR CAIXA (SUCATA) VIEW -->
+        <section id="view-embalagem-sucata" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-box-open" style="color: #f87171;"></i> Processo de Embalagem - Caixas de Sucata</h3>
+              <span class="badge badge-danger"><i class="fa-solid fa-trash-can"></i> MÓDULO SUCATA</span>
+            </div>
+            <div class="card-body">
+
+              <div class="grid-2col">
+                <form id="form-embalagem-sucata" onsubmit="processEmbalarUnidadeSucata(event)">
+                  <div class="grid-2col">
+                    <div class="form-group">
+                      <label for="emb-sucata-caixa-id"><i class="fa-solid fa-box"></i> Número/Código da Caixa (Sucata)</label>
+                      <div class="flex-row">
+                        <input type="text" id="emb-sucata-caixa-id" readonly placeholder="Carregando..." class="bg-dark-input" style="color: #f87171; font-weight: 700;">
+                        <button type="button" class="btn btn-secondary" onclick="generateNewCaixaSucataCode()" style="margin-top: 15px;" title="Iniciar uma nova caixa de sucata sequencial">
+                          <i class="fa-solid fa-plus"></i> Nova Caixa
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="emb-sucata-printer-select"><i class="fa-solid fa-print"></i> Impressora Zebra (IP/Posto)</label>
+                      <select id="emb-sucata-printer-select" onchange="saveSelectedPrinterPreference('embalagem_sucata')">
+                        <option value="">Nenhuma impressora selecionada</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="emb-sucata-serial"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade de Sucata *</label>
+                    <input type="text" id="emb-sucata-serial" placeholder="Bipe o SERIAL da unidade..." required>
+                  </div>
+
+                  <button type="submit" class="btn btn-danger btn-block">
+                    <i class="fa-solid fa-box-archive"></i> Embalar Unidade na Caixa de Sucata
+                  </button>
+                </form>
+
+                <div class="box-status-card" style="border-left: 4px solid #f87171;">
+                  <div class="flex-between">
+                    <h4><i class="fa-solid fa-boxes-stacked" style="color: #f87171;"></i> Resumo da Caixa (Sucata)</h4>
+                    <div class="flex-row" style="gap: 5px;">
+                      <button type="button" class="btn btn-primary btn-sm" onclick="abrirModalConteudoCaixaSucata()" title="Visualizar Conteúdo Detalhado">
+                        <i class="fa-solid fa-eye"></i> Ver Conteúdo
+                      </button>
+                      <button type="button" class="btn btn-outline btn-sm" onclick="solicitarFechamentoManualCaixaSucata()" title="Fechar Caixa e Imprimir Etiqueta ZPL de Sucata">
+                        <i class="fa-solid fa-print"></i> Fechar / Imprimir
+                      </button>
+                    </div>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Código da Caixa:</span>
+                    <strong id="current-box-sucata-code" style="color: #f87171;">CS000000001</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Modelo de Referência:</span>
+                    <strong id="current-box-sucata-modelo">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Regional / Localidade:</span>
+                    <strong id="current-box-sucata-localidade">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Unidades na Caixa:</span>
+                    <strong id="current-box-sucata-count">0 / 10</strong>
+                  </div>
+                  <div class="box-unit-list" id="current-box-sucata-units">
+                    <p class="text-muted text-center">Nenhuma unidade embalada nesta caixa de sucata ainda.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- REIMPRESSÃO DE ETIQUETA DE CAIXA DE SUCATA -->
+              <div class="card glass-card margin-top" style="border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                <div class="card-header flex-between">
+                  <h3><i class="fa-solid fa-rotate-right"></i> Reimprimir Etiqueta de Caixa de Sucata</h3>
+                </div>
+                <div class="card-body">
+                  <form id="form-reimprimir-caixa-sucata" onsubmit="reimprimirEtiquetaCaixaSucata(event)">
+                    <div class="grid-3col">
+                      <div class="form-group">
+                        <label for="reimp-caixa-sucata-id"><i class="fa-solid fa-barcode"></i> Código da Caixa (CS...) ou Serial/MAC *</label>
+                        <input type="text" id="reimp-caixa-sucata-id" placeholder="Ex: CS000000001 ou Serial/MAC..." required style="text-transform: uppercase;">
+                      </div>
+
+                      <div class="form-group">
+                        <label for="reimp-printer-sucata-select"><i class="fa-solid fa-print"></i> Impressora Zebra (Destino)</label>
+                        <select id="reimp-printer-sucata-select">
+                          <option value="">-- Usar Impressora do Posto --</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group" style="display: flex; align-items: flex-end;">
+                        <button type="submit" class="btn btn-danger btn-block">
+                          <i class="fa-solid fa-print"></i> Buscar & Reimprimir
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        <!-- 8.8 PALLET DE SUCATA VIEW -->
+        <section id="view-embalagem-pallet-sucata" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-pallet" style="color: #f87171;"></i> Processo de Embalagem - Pallet de Sucata</h3>
+              <div class="header-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="initPalletSucataView()">
+                  <i class="fa-solid fa-rotate"></i> Atualizar
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+
+              <div class="grid-2col">
+                <div>
+                  <form id="form-pallet-sucata" onsubmit="processPalletSucataCaixa(event)">
+                    <div class="form-group">
+                      <label for="pallet-sucata-code-id"><i class="fa-solid fa-pallet"></i> Código do Pallet de Sucata (Sequencial)</label>
+                      <div class="flex-row">
+                        <input type="text" id="pallet-sucata-code-id" readonly placeholder="Carregando..." class="bg-dark-input" style="font-weight: 700; color: #f87171;">
+                        <button type="button" class="btn btn-secondary" onclick="generateNewPalletSucataCode()" style="margin-top: 15px;" title="Iniciar um novo Pallet de Sucata sequencial">
+                          <i class="fa-solid fa-plus"></i> Novo Pallet
+                        </button>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="pallet-sucata-caixa-input"><i class="fa-solid fa-barcode"></i> Bipar Código da Caixa de Sucata (CS...) *</label>
+                      <input type="text" id="pallet-sucata-caixa-input" placeholder="Bipe o código da caixa (Ex: CS000000001)..." required style="text-transform: uppercase;">
+                    </div>
+
+                    <button type="submit" class="btn btn-danger btn-block" style="font-size: 1.05rem; padding: 12px;">
+                      <i class="fa-solid fa-layer-group"></i> Adicionar Caixa ao Pallet de Sucata
+                    </button>
+                  </form>
+                </div>
+
+                <div class="box-status-card" style="border-left: 4px solid #f87171;">
+                  <div class="flex-between">
+                    <h4><i class="fa-solid fa-boxes-stacked" style="color: #f87171;"></i> Resumo do Pallet (Sucata)</h4>
+                    <div class="flex-row" style="gap: 6px;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="sincronizarPalletSucataManualmente()" title="Recarregar Caixas e Unidades do Servidor">
+                        <i class="fa-solid fa-rotate"></i> Atualizar
+                      </button>
+                      <button type="button" class="btn btn-primary btn-sm" onclick="imprimirFolhaA4PalletSucataAtual()" title="Imprimir Folha A4 de Identificação do Pallet de Sucata">
+                        <i class="fa-solid fa-print"></i> Imprimir A4
+                      </button>
+                      <button type="button" class="btn btn-outline btn-sm" onclick="solicitarFechamentoManualPalletSucata()" title="Fechar Pallet e Finalizar Lote">
+                        <i class="fa-solid fa-lock"></i> Fechar Pallet
+                      </button>
+                    </div>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Código do Pallet:</span>
+                    <strong id="pallet-sucata-stat-code" style="color: #f87171;">PS0000000001</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Modelo de Referência:</span>
+                    <strong id="pallet-sucata-stat-modelo">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Regional / Localidade:</span>
+                    <strong id="pallet-sucata-stat-localidade">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Caixas:</span>
+                    <strong id="pallet-sucata-stat-count" style="color: #34d399;">0 / 40 Caixas</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Unidades no Pallet:</span>
+                    <strong id="pallet-sucata-stat-total-unidades">0 Unidades</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Status do Pallet:</span>
+                    <strong id="pallet-sucata-stat-status"><span class="badge badge-warning">ABERTO</span></strong>
+                  </div>
+                  
+                  <h5 style="margin-top: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #94a3b8;"><i class="fa-solid fa-box"></i> Caixas neste Pallet de Sucata:</h5>
+                  <div class="box-unit-list" id="pallet-sucata-box-list-container" style="max-height: 220px; overflow-y: auto;">
+                    <p class="text-muted text-center">Nenhuma caixa adicionada a este pallet ainda.</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- CONSULTA DE PALLETS DE SUCATA -->
+              <div class="card glass-card margin-top" style="border-top: 1px solid rgba(255, 255, 255, 0.1);">
+                <div class="card-header flex-between">
+                  <h3><i class="fa-solid fa-list-check"></i> Consulta de Pallets de Sucata Registrados</h3>
+                </div>
+                <div class="card-body">
+                  <div class="table-responsive">
+                    <table class="table" id="tabela-todos-pallets-sucata">
+                      <thead>
+                        <tr>
+                          <th>Código Pallet</th>
+                          <th>Regional / Localidade</th>
+                          <th>Qtd Caixas</th>
+                          <th>Total Unidades</th>
+                          <th>Status</th>
+                          <th>Data Paletização</th>
+                          <th style="text-align: center;">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody id="tbody-todos-pallets-sucata">
+                        <!-- Injetado dinamicamente -->
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
+        <!-- 8.9 CONSULTA E AJUSTES DE SUCATA VIEW -->
+        <section id="view-embalagem-consulta-sucata" class="page-view">
+          <div class="card glass-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-boxes-packing" style="color: #f87171;"></i> Consulta e Ajustes de Caixas de Sucata</h3>
+              <div class="header-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="carregarListaTodasCaixasSucata()">
+                  <i class="fa-solid fa-rotate"></i> Atualizar Lista
+                </button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="grid-3col">
+                <div class="form-group" style="grid-column: span 2;">
+                  <label for="ajuste-caixa-sucata-search"><i class="fa-solid fa-magnifying-glass"></i> Buscar Caixa de Sucata (CS...) ou Serial/GPON/MAC</label>
+                  <div class="flex-row">
+                    <input type="text" id="ajuste-caixa-sucata-search" placeholder="Ex: CS000000001 ou Serial..." style="text-transform: uppercase;" onkeyup="if(event.key==='Enter') buscarCaixaSucataParaAjuste()">
+                    <button type="button" class="btn btn-danger" onclick="buscarCaixaSucataParaAjuste()">
+                      <i class="fa-solid fa-search"></i> Buscar Caixa
+                    </button>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="ajuste-caixas-sucata-select"><i class="fa-solid fa-list-check"></i> Selecionar Caixa Rápida</label>
+                  <select id="ajuste-caixas-sucata-select" onchange="selecionarCaixaSucataRapida(this.value)">
+                    <option value="">-- Selecione uma Caixa de Sucata --</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- TABELA DE TODAS AS CAIXAS DE SUCATA -->
+              <div class="margin-top">
+                <h4><i class="fa-solid fa-boxes-stacked"></i> Todas as Caixas de Sucata Registradas</h4>
+                <div class="table-responsive margin-top">
+                  <table class="table" id="tabela-todas-caixas-sucata">
+                    <thead>
+                      <tr>
+                        <th>Código Caixa</th>
+                        <th>Modelo</th>
+                        <th>Regional / Localidade</th>
+                        <th>Qtd Unidades</th>
+                        <th>Status</th>
+                        <th>Última Atualização</th>
+                        <th style="text-align: center;">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbody-todas-caixas-sucata">
+                      <!-- Injetado dinamicamente -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </section>
+
         <!-- 9. MENU EXPEDIÇÃO VIEW -->
         <section id="view-expedicao" class="page-view">
           <div class="card glass-card">
@@ -1854,7 +2149,7 @@
   <script src="js/audio.js"></script>
   <script src="js/models.js"></script>
   <script src="js/excel.js"></script>
-  <script src="js/app.js?v=3.0"></script>
+  <script src="js/app.js?v=3.1"></script>
 
   <!-- TOAST NOTIFICATION CONTAINER -->
   <div id="toast-container" class="toast-container"></div>
