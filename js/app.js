@@ -157,12 +157,35 @@ function getSeedUsers() {
   ];
 }
 
+// Função auxiliar global para obter a capacidade máxima de fechamento de caixa por modelo
+function getBoxCapacityForModel(modeloNome) {
+  if (!modeloNome) return 10;
+  const nomeUpper = String(modeloNome).trim().toUpperCase();
+  
+  // Regra prioritária para FIBERLINK 101 (ou modelos da linha Fiberlink) = 60 unidades
+  if (nomeUpper.includes('FIBERLINK 101') || nomeUpper.includes('FIBERLINK') || nomeUpper.includes('FL101') || nomeUpper.includes('FL-101')) {
+    return 60;
+  }
+  
+  // Se o modelo estiver cadastrado com capacidade customizada
+  if (appState && Array.isArray(appState.models)) {
+    const foundModel = appState.models.find(m => m.nome && m.nome.trim().toUpperCase() === nomeUpper);
+    if (foundModel && foundModel.capacidadeCaixa && parseInt(foundModel.capacidadeCaixa) > 0) {
+      return parseInt(foundModel.capacidadeCaixa);
+    }
+  }
+  
+  // Padrão do sistema para outros modelos = 10 unidades
+  return 10;
+}
+
 function getSeedModels() {
   return [
     {
       id: 'MOD_1',
       fabricante: 'HUAWEI',
       nome: 'HG8145V5',
+      capacidadeCaixa: 10,
       camposCount: 2,
       rules: [
         { fieldName: 'SERIAL', lengthType: 'EXACT', exactLength: 12, prefixes: '215008,2150' },
@@ -173,6 +196,7 @@ function getSeedModels() {
       id: 'MOD_2',
       fabricante: 'ZTE',
       nome: 'F670L',
+      capacidadeCaixa: 10,
       camposCount: 3,
       rules: [
         { fieldName: 'SERIAL', lengthType: 'EXACT', exactLength: 12, prefixes: 'ZTEG' },
@@ -184,9 +208,20 @@ function getSeedModels() {
       id: 'MOD_3',
       fabricante: 'FIBERHOME',
       nome: 'HG6245N',
+      capacidadeCaixa: 10,
       camposCount: 1,
       rules: [
         { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 10, maxLength: 16, prefixes: 'FHTT' }
+      ]
+    },
+    {
+      id: 'MOD_4',
+      fabricante: 'PARKS',
+      nome: 'FIBERLINK 101',
+      capacidadeCaixa: 60,
+      camposCount: 1,
+      rules: [
+        { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: '' }
       ]
     }
   ];
@@ -917,10 +952,14 @@ async function saveModelo(e) {
     });
   });
 
+  const capacidadeCaixaInput = document.getElementById('mod-capacidade-caixa');
+  const capacidadeCaixa = capacidadeCaixaInput ? (parseInt(capacidadeCaixaInput.value) || 10) : 10;
+
   const newModel = {
     id: targetId,
     fabricante,
     nome,
+    capacidadeCaixa,
     camposCount,
     rules
   };
@@ -962,6 +1001,7 @@ function renderModelosTable() {
 
   appState.models.forEach(m => {
     const tr = document.createElement('tr');
+    const cap = m.capacidadeCaixa || (m.nome && m.nome.includes('FIBERLINK') ? 60 : 10);
     const rulesSummary = m.rules.map(r => {
       let lenStr = r.lengthType === 'EXACT' ? `${r.exactLength} chars` : 'Livre';
       let prefStr = r.prefixes ? ` (Pref: ${r.prefixes})` : '';
@@ -971,6 +1011,7 @@ function renderModelosTable() {
     tr.innerHTML = `
       <td><strong>${m.fabricante}</strong></td>
       <td>${m.nome}</td>
+      <td><span class="badge ${cap > 10 ? 'badge-warning' : 'badge-success'}"><strong>${cap} un/cx</strong></span></td>
       <td><span class="badge badge-info">${m.camposCount} Bipável(is)</span></td>
       <td class="small">${rulesSummary}</td>
       <td>
@@ -1020,6 +1061,11 @@ function editModelo(id) {
 
   document.getElementById('mod-nome').value = model.nome;
   document.getElementById('mod-campos-count').value = model.camposCount;
+  
+  const capInput = document.getElementById('mod-capacidade-caixa');
+  if (capInput) {
+    capInput.value = model.capacidadeCaixa || (model.nome && model.nome.includes('FIBERLINK') ? 60 : 10);
+  }
 
   renderModelRuleFields();
 
@@ -2532,9 +2578,12 @@ function updateEmbalagemBoxSummary() {
   document.getElementById('current-box-code').innerText = caixaId || 'C000000001';
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
   
+  const refModelo = boxUnits.length > 0 ? boxUnits[0].modelo : null;
+  const maxCapacidade = getBoxCapacityForModel(refModelo);
+
   const countEl = document.getElementById('current-box-count');
   if (countEl) {
-    countEl.innerText = `${boxUnits.length} / 10`;
+    countEl.innerText = `${boxUnits.length} / ${maxCapacidade}`;
   }
 
   const modeloRefEl = document.getElementById('current-box-modelo');
@@ -2579,11 +2628,12 @@ function abrirModalConteudoCaixa() {
   const caixaId = codeField.value.trim().toUpperCase();
 
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  const maxCap = getBoxCapacityForModel(boxUnits.length > 0 ? boxUnits[0].modelo : null);
 
   document.getElementById('modal-conteudo-caixa-id').innerText = caixaId;
   document.getElementById('modal-conteudo-modelo').innerText = boxUnits.length > 0 ? boxUnits[0].modelo : '-';
   document.getElementById('modal-conteudo-localidade').innerText = boxUnits.length > 0 ? (boxUnits[0].localidade || '-') : '-';
-  document.getElementById('modal-conteudo-total').innerText = `${boxUnits.length} / 10 Unidades`;
+  document.getElementById('modal-conteudo-total').innerText = `${boxUnits.length} / ${maxCap} Unidades`;
 
   const tbody = document.getElementById('tbody-modal-conteudo-unidades');
   if (boxUnits.length === 0) {
@@ -2637,6 +2687,9 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
   const qrData = idList.join('\\0D\\0A') + (idList.length > 0 ? '\\0D\\0A' : '');
   const barcodeData = caixaId;
 
+  const qrMag203 = units.length > 30 ? 3 : (units.length > 15 ? 4 : 5);
+  const qrMag300 = units.length > 30 ? 4 : (units.length > 15 ? 5 : 7);
+
   // Se a impressora for de 203 DPI (~8 dots/mm) vs 300 DPI (~12 dots/mm), usamos coordenadas dimensionadas (fator 203/300 = 0.677)
   if (parseInt(targetDpi) === 203 || parseInt(targetDpi) === 200) {
     return `CT~~CD,~CC^~CT~
@@ -2682,7 +2735,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FT29,250^A0N,28,29^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FO324,213^GB0,51,6^FS
 ^FT355,248^A0N,28,29^FH\\^CI28^FD${localidadeStr}^FS^CI27
-^FO285,290^BQN,2,5
+^FO285,290^BQN,2,${qrMag203}
 ^FH\\^FDLA,${qrData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
@@ -2728,7 +2781,7 @@ function generateZplBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FT525,340^A0N,42,43^FH\\^CI28^FDBrasil TecPar^FS^CI27
 ^FO1,424^GFA,97,1976,152,:Z64:eJxjYBh4wPgfA/yju43EAfLdRa6N5LuLtjYSB/4NtANwgFF3kQZG3UUaGBTuon+hMADFI9k2ku0uGttIHAAAxaVS6w==:824C
 ^FT43,413^A0N,42,43^FH\\^CI28^FD${qtdStr}^FS^CI27
-^FT433,878^BQN,2,7
+^FT433,878^BQN,2,${qrMag300}
 ^FH\\^FDLA,${qrData}^FS
 ^FO479,356^GB0,75,9^FS
 ^FT525,410^A0N,42,43^FH\\^CI28^FD${localidadeStr}^FS^CI27
@@ -2889,7 +2942,8 @@ async function syncCaixaWithServer(caixaId) {
     }
 
     const firstUnit = boxUnits[0];
-    const isFechada = boxUnits.length >= 10 || boxUnits.every(u => u.embalagem && u.embalagem.fechada);
+    const maxCap = getBoxCapacityForModel(firstUnit.modelo);
+    const isFechada = boxUnits.length >= maxCap || boxUnits.every(u => u.embalagem && u.embalagem.fechada);
     const palletId = (firstUnit.pallet && firstUnit.pallet.palletId) ? firstUnit.pallet.palletId : null;
     
     // Mapeamento de todos os GPON IDs das unidades da caixa
@@ -3141,10 +3195,13 @@ async function executarEmbalarUnidadeItem(serial, caixaId) {
     }
   }
 
-  // Verificar se a caixa já possui 10 unidades
-  if (existingBoxUnits.length >= 10) {
+  const refModelo = existingBoxUnits.length > 0 ? existingBoxUnits[0].modelo : unit.modelo;
+  const maxCapacidade = getBoxCapacityForModel(refModelo);
+
+  // Verificar se a caixa já possui a capacidade máxima de unidades
+  if (existingBoxUnits.length >= maxCapacidade) {
     playErrorBeep();
-    alert(`A caixa [${caixaId}] já atingiu a capacidade máxima de 10 unidades! Feche a caixa para iniciar uma nova.`);
+    alert(`A caixa [${caixaId}] já atingiu a capacidade máxima de ${maxCapacidade} unidades! Feche a caixa para iniciar uma nova.`);
     return;
   }
 
@@ -3177,7 +3234,7 @@ async function executarEmbalarUnidadeItem(serial, caixaId) {
   updateEmbalagemBoxSummary();
 
   const updatedBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-  showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa ${caixaId}! [${updatedBoxUnits.length}/10]`);
+  showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa ${caixaId}! [${updatedBoxUnits.length}/${maxCapacidade}]`);
 
   // PERSISTÊNCIA ASSÍNCRONA NO SERVIDOR
   try {
@@ -3200,8 +3257,8 @@ async function executarEmbalarUnidadeItem(serial, caixaId) {
   }
 
 
-  // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades na caixa
-  if (updatedBoxUnits.length >= 10) {
+  // FECHAMENTO AUTOMÁTICO: se atingiu a capacidade máxima na caixa
+  if (updatedBoxUnits.length >= maxCapacidade) {
     setTimeout(async () => {
       await fecharCaixaEmbalagem(caixaId);
     }, 300);
@@ -4407,7 +4464,8 @@ function carregarListaTodasCaixas() {
   }
 
   tbody.innerHTML = caixas.map(c => {
-    const isFechada = c.unidades.length >= 10 || c.unidades.some(u => u.embalagem && u.embalagem.fechada);
+    const maxCap = getBoxCapacityForModel(c.modelo);
+    const isFechada = c.unidades.length >= maxCap || c.unidades.some(u => u.embalagem && u.embalagem.fechada);
     const statusBadge = isFechada 
       ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>`
       : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>`;
@@ -4417,7 +4475,7 @@ function carregarListaTodasCaixas() {
         <td><strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
         <td>${c.modelo}</td>
         <td>${c.localidade}</td>
-        <td><span class="badge ${c.unidades.length >= 10 ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / 10</span></td>
+        <td><span class="badge ${c.unidades.length >= maxCap ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / ${maxCap}</span></td>
         <td>${statusBadge}</td>
         <td>${c.data}</td>
         <td style="text-align: center;">
@@ -4448,23 +4506,22 @@ function buscarCaixaParaAjuste() {
   const unitWithCaixa = appState.units.find(u => u.embalagem && u.embalagem.caixaId === query);
   if (unitWithCaixa) {
     caixaFound = unitWithCaixa.embalagem.caixaId;
-  } else {
-    // 2. Procurar por serial, gpon ou mac da unidade
-    const unitMatch = appState.units.find(u => u.serial === query || u.gpon === query || u.mac === query);
-    if (unitMatch && unitMatch.embalagem && unitMatch.embalagem.caixaId) {
-      caixaFound = unitMatch.embalagem.caixaId;
+  }
+
+  // 2. Procurar por serial, GPON ou MAC de uma unidade
+  if (!caixaFound) {
+    const singleUnit = appState.units.find(u => (u.serial === query || u.gpon === query || u.mac === query) && u.embalagem);
+    if (singleUnit) {
+      caixaFound = singleUnit.embalagem.caixaId;
     }
   }
 
-  if (!caixaFound) {
+  if (caixaFound) {
+    selecionarCaixaRapida(caixaFound);
+  } else {
     playErrorBeep();
-    alert(`Nenhuma caixa encontrada para a busca: "${query}". Verifique se o código está correto ou se a unidade já foi embalada.`);
-    return;
+    alert(`Nenhuma caixa encontrada para a busca: "${query}".`);
   }
-
-  playSuccessBeep();
-  document.getElementById('ajuste-caixas-select').value = caixaFound;
-  exibirDetalhesCaixaParaAjuste(caixaFound);
 }
 
 function selecionarCaixaRapida(caixaId) {
@@ -4493,18 +4550,19 @@ function exibirDetalhesCaixaParaAjuste(caixaId) {
   painel.classList.remove('hidden');
   const modelo = boxUnits[0].modelo || '-';
   const localidade = boxUnits[0].localidade || '-';
+  const maxCap = getBoxCapacityForModel(modelo);
 
   document.getElementById('ajuste-detalhe-caixa-id').innerHTML = `<i class="fa-solid fa-box"></i> Caixa: ${caixaId}`;
   document.getElementById('ajuste-detalhe-modelo').innerText = modelo;
   document.getElementById('ajuste-detalhe-localidade').innerText = localidade;
-  document.getElementById('ajuste-detalhe-total').innerText = `${boxUnits.length} / 10 Unidades`;
+  document.getElementById('ajuste-detalhe-total').innerText = `${boxUnits.length} / ${maxCap} Unidades`;
 
-  const isFechada = boxUnits.length >= 10 || boxUnits.some(u => u.embalagem && u.embalagem.fechada);
+  const isFechada = boxUnits.length >= maxCap || boxUnits.some(u => u.embalagem && u.embalagem.fechada);
   const statusContainer = document.getElementById('ajuste-detalhe-status');
   if (statusContainer) {
     statusContainer.innerHTML = isFechada 
       ? `<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>` 
-      : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA (${boxUnits.length}/10)</span>`;
+      : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA (${boxUnits.length}/${maxCap})</span>`;
   }
 
   const tbody = document.getElementById('tbody-ajuste-unidades-caixa');
@@ -4563,11 +4621,13 @@ async function adicionarUnidadeNaCaixaAjuste(e) {
   }
 
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === currentAjusteCaixaId);
+  const refModelo = boxUnits.length > 0 ? boxUnits[0].modelo : unit.modelo;
+  const maxCap = getBoxCapacityForModel(refModelo);
 
   // Validação de capacidade
-  if (boxUnits.length >= 10) {
+  if (boxUnits.length >= maxCap) {
     playErrorBeep();
-    alert(`A caixa [${currentAjusteCaixaId}] já possui a capacidade máxima de 10 unidades!`);
+    alert(`A caixa [${currentAjusteCaixaId}] já possui a capacidade máxima de ${maxCap} unidades!`);
     return;
   }
 
@@ -5623,6 +5683,9 @@ function generateZplSucataBoxLabel(caixaId, modelo, units, targetDpi = 300) {
   const qrData = idList.join('\\0D\\0A') + (idList.length > 0 ? '\\0D\\0A' : '');
   const boxBarcodeData = caixaId;
 
+  const qrMag203 = units.length > 30 ? 3 : (units.length > 15 ? 4 : 5);
+  const qrMag300 = units.length > 30 ? 4 : (units.length > 15 ? 5 : 7);
+
   // 203 DPI CALIBRADO PARA SUCATA
   if (parseInt(targetDpi) === 203 || parseInt(targetDpi) === 200) {
     return `CT~~CD,~CC^~CT~
@@ -5668,7 +5731,7 @@ function generateZplSucataBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FT29,250^A0N,28,29^FH\\^CI28^FD${qtdStr}^FS^CI27
 ^FO324,213^GB0,51,6^FS
 ^FT355,248^A0N,28,29^FH\\^CI28^FD${localidadeStr}^FS^CI27
-^FO285,290^BQN,2,5
+^FO285,290^BQN,2,${qrMag203}
 ^FH\\^FDLA,${qrData}^FS
 ^PQ1,0,1,Y
 ^XZ`;
@@ -5713,7 +5776,7 @@ function generateZplSucataBoxLabel(caixaId, modelo, units, targetDpi = 300) {
 ^FT525,340^A0N,42,43^FH\\^CI28^FDBrasil TecPar^FS^CI27
 ^FO1,424^GFA,97,1976,152,:Z64:eJxjYBh4wPgfA/yju43EAfLdRa6N5LuLtjYSB/4NtANwgFF3kQZG3UUaGBTuon+hMADFI9k2ku0uGttIHAAAxaVS6w==:824C
 ^FT211,409^A0N,42,43^FH\\^CI28^FD${qtdStr}^FS^CI27
-^FT433,878^BQN,2,7
+^FT433,878^BQN,2,${qrMag300}
 ^FH\\^FDLA,${qrData}^FS
 ^FO48,288^GFA,545,1044,12,:Z64:eJxVk7FtwzAQRSkIhgKkUJlSI2QEjuJRyEBdUniFjJHO8gYZgWVKFikEg+bl3x1JMYRtPHzK/5N3J2OMeTLHOndMoeFAv41nIt/xVtkS7ZUd0aPZYH1WG6yoPDJn5YmZmiXWj/AinJoNlejCW7UhjZ4KP9QmX0v0wqFnjYYWzLtGO7E4STRb49FXTgAPfN8XbIMvdPfmmQKfHhHf+OPGsbO4u6oj1oZRnufz2KZTWiLzKjdWfivM/kF4DnIeJ3rgakZbmM+/iM8m9+LgZDe+b54ka5M6rMLeDE4DotNaBfl6KUTA3o20QDsC1qxF3LE3JuUE/ZK1jwn6lLS/GZ9518Yk/kRtWAbbXRsMfbfaYtZRBh0I6NEpW+ihDNcM/VZmaIa+Fh6hj2XORuiXwgP0qUzKkBeUojF2ysTlZbfZV442VX2OLtepnIKr40ofvo0u4Q6xsh/bO+C2qY063a8Ht8H9z67Oreo9x45D9/zW6b7TzaFnc+ip0/dOb/boWLNHx5o9Otbszam9p1hf8vsHInS8Jg==:C74A
 ^FO203,348^GFA,89,1664,128,:Z64:eJz7/x8F/GOgM/hPGvgwwPYTAg0DbD8B8GeA7UcHP0btH+H2owHGAbafEOAfYPsJgfoBtp8AYMawHwD7cXKH:BC5C
@@ -5793,9 +5856,11 @@ function updateEmbalagemSucataBoxSummary() {
   if (codeEl) codeEl.innerText = caixaId;
 
   const boxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
+  const refModelo = boxUnits.length > 0 ? boxUnits[0].modelo : null;
+  const maxCapacidade = getBoxCapacityForModel(refModelo);
   
   const countEl = document.getElementById('current-box-sucata-count');
-  if (countEl) countEl.innerText = `${boxUnits.length} / 10`;
+  if (countEl) countEl.innerText = `${boxUnits.length} / ${maxCapacidade}`;
 
   const modeloRefEl = document.getElementById('current-box-sucata-modelo');
   if (modeloRefEl) {
@@ -5901,11 +5966,14 @@ async function executarEmbalarUnidadeSucataItem(serial, caixaId) {
     return;
   }
 
-  // Verificar capacidade máxima (10 unidades)
   const existingBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-  if (existingBoxUnits.length >= 10) {
+  const refModelo = existingBoxUnits.length > 0 ? existingBoxUnits[0].modelo : unit.modelo;
+  const maxCapacidade = getBoxCapacityForModel(refModelo);
+
+  // Verificar capacidade máxima
+  if (existingBoxUnits.length >= maxCapacidade) {
     playErrorBeep();
-    alert(`A caixa de sucata [${caixaId}] já atingiu 10 unidades! Feche a caixa para iniciar uma nova.`);
+    alert(`A caixa de sucata [${caixaId}] já atingiu ${maxCapacidade} unidades! Feche a caixa para iniciar uma nova.`);
     return;
   }
 
@@ -5939,7 +6007,7 @@ async function executarEmbalarUnidadeSucataItem(serial, caixaId) {
   updateEmbalagemSucataBoxSummary();
 
   const updatedBoxUnits = appState.units.filter(u => u.embalagem && u.embalagem.caixaId === caixaId);
-  showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa de sucata ${caixaId}! [${updatedBoxUnits.length}/10]`);
+  showToast(`Unidade ${unit.serial} (${unit.modelo}) adicionada à caixa de sucata ${caixaId}! [${updatedBoxUnits.length}/${maxCapacidade}]`);
 
   // PERSISTÊNCIA ASSÍNCRONA NO SERVIDOR
   try {
@@ -5954,8 +6022,8 @@ async function executarEmbalarUnidadeSucataItem(serial, caixaId) {
     }).catch(err => console.error("Erro ao sincronizar sucata com servidor:", err));
   } catch (err) {}
 
-  // FECHAMENTO AUTOMÁTICO: se atingiu 10 unidades
-  if (updatedBoxUnits.length >= 10) {
+  // FECHAMENTO AUTOMÁTICO: se atingiu a capacidade máxima de unidades
+  if (updatedBoxUnits.length >= maxCapacidade) {
     setTimeout(async () => {
       await fecharCaixaEmbalagemSucata(caixaId);
     }, 300);
@@ -5973,7 +6041,8 @@ function abrirModalConteudoCaixaSucata() {
     return;
   }
 
-  document.getElementById('modal-box-units-title').innerText = `Conteúdo da Caixa de Sucata: ${caixaId}`;
+  const maxCap = getBoxCapacityForModel(boxUnits.length > 0 ? boxUnits[0].modelo : null);
+  document.getElementById('modal-box-units-title').innerText = `Conteúdo da Caixa de Sucata: ${caixaId} (${boxUnits.length} / ${maxCap})`;
   const tbody = document.getElementById('tbody-modal-box-units');
   if (tbody) {
     tbody.innerHTML = boxUnits.map((u, idx) => `
@@ -7064,13 +7133,16 @@ function carregarListaTodasCaixasSucata() {
       return;
     }
 
-    tbody.innerHTML = caixasList.map(c => `
+    tbody.innerHTML = caixasList.map(c => {
+      const maxCap = getBoxCapacityForModel(c.modelo);
+      const isFechada = c.unidades.length >= maxCap || c.fechada;
+      return `
       <tr>
         <td><strong style="color: #f87171;"><i class="fa-solid fa-box"></i> ${c.caixaId}</strong></td>
         <td>${c.modelo}</td>
         <td>${c.localidade}</td>
-        <td><span class="badge ${c.unidades.length >= 10 ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / 10</span></td>
-        <td>${c.fechada ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>' : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>'}</td>
+        <td><span class="badge ${c.unidades.length >= maxCap ? 'badge-success' : 'badge-warning'}">${c.unidades.length} / ${maxCap}</span></td>
+        <td>${isFechada ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>' : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>'}</td>
         <td>${c.data}</td>
         <td style="text-align: center; white-space: nowrap;">
           <button type="button" class="btn btn-primary btn-sm" onclick="selecionarCaixaSucataParaAjuste('${c.caixaId}')" title="Ajustar / Editar Caixa de Sucata">
@@ -7084,7 +7156,8 @@ function carregarListaTodasCaixasSucata() {
           </button>
         </td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
   }
 }
 
@@ -7140,7 +7213,8 @@ function exibirDetalhesCaixaSucataParaAjuste(caixaId) {
   painel.classList.remove('hidden');
   const modelo = boxUnits.length > 0 ? boxUnits[0].modelo : '-';
   const localidade = boxUnits.length > 0 ? boxUnits[0].localidade : '-';
-  const isFechada = boxUnits.length >= 10 || boxUnits.some(u => u.embalagem && u.embalagem.fechada);
+  const maxCap = getBoxCapacityForModel(modelo);
+  const isFechada = boxUnits.length >= maxCap || boxUnits.some(u => u.embalagem && u.embalagem.fechada);
 
   const titleEl = document.getElementById('ajuste-detalhe-caixa-sucata-id');
   if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-box"></i> Caixa de Sucata: ${caixaId}`;
@@ -7152,13 +7226,13 @@ function exibirDetalhesCaixaSucataParaAjuste(caixaId) {
   if (locEl) locEl.innerText = localidade;
 
   const totalEl = document.getElementById('ajuste-detalhe-total-sucata');
-  if (totalEl) totalEl.innerText = `${boxUnits.length} / 10`;
+  if (totalEl) totalEl.innerText = `${boxUnits.length} / ${maxCap}`;
 
   const statusEl = document.getElementById('ajuste-detalhe-status-sucata');
   if (statusEl) {
     statusEl.innerHTML = isFechada 
       ? '<span class="badge badge-success"><i class="fa-solid fa-lock"></i> FECHADA</span>' 
-      : '<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA</span>';
+      : `<span class="badge badge-warning"><i class="fa-solid fa-lock-open"></i> ABERTA (${boxUnits.length}/${maxCap})</span>`;
   }
 
   const tbody = document.getElementById('tbody-ajuste-unidades-caixa-sucata');
