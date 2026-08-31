@@ -162,8 +162,17 @@ function getBoxCapacityForModel(modeloNome) {
   if (!modeloNome) return 10;
   const nomeUpper = String(modeloNome).trim().toUpperCase();
   
-  // Regra prioritária para FIBERLINK 101 (ou modelos da linha Fiberlink) = 60 unidades
+  // Modelos com capacidade configurada para 60 unidades por caixa:
+  // 1. FIBERLINK 101
   if (nomeUpper.includes('FIBERLINK 101') || nomeUpper.includes('FIBERLINK') || nomeUpper.includes('FL101') || nomeUpper.includes('FL-101')) {
+    return 60;
+  }
+  // 2. ZXHN F601
+  if (nomeUpper.includes('F601') || nomeUpper.includes('ZXHN F601') || nomeUpper.includes('ZXHN-F601')) {
+    return 60;
+  }
+  // 3. UF-LOCO
+  if (nomeUpper.includes('UF-LOCO') || nomeUpper.includes('UF LOCO') || nomeUpper.includes('UFLOCO') || nomeUpper.includes('LOCO')) {
     return 60;
   }
   
@@ -222,6 +231,28 @@ function getSeedModels() {
       camposCount: 1,
       rules: [
         { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: '' }
+      ]
+    },
+    {
+      id: 'MOD_5',
+      fabricante: 'ZTE',
+      nome: 'ZXHN F601',
+      capacidadeCaixa: 60,
+      camposCount: 2,
+      rules: [
+        { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: 'ZTEG' },
+        { fieldName: 'MAC', lengthType: 'RANGE', minLength: 12, maxLength: 17, prefixes: '' }
+      ]
+    },
+    {
+      id: 'MOD_6',
+      fabricante: 'UBIQUITI',
+      nome: 'UF-LOCO',
+      capacidadeCaixa: 60,
+      camposCount: 2,
+      rules: [
+        { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: '' },
+        { fieldName: 'MAC', lengthType: 'RANGE', minLength: 12, maxLength: 17, prefixes: '' }
       ]
     }
   ];
@@ -1001,7 +1032,7 @@ function renderModelosTable() {
 
   appState.models.forEach(m => {
     const tr = document.createElement('tr');
-    const cap = m.capacidadeCaixa || (m.nome && m.nome.includes('FIBERLINK') ? 60 : 10);
+    const cap = m.capacidadeCaixa || getBoxCapacityForModel(m.nome);
     const rulesSummary = m.rules.map(r => {
       let lenStr = r.lengthType === 'EXACT' ? `${r.exactLength} chars` : 'Livre';
       let prefStr = r.prefixes ? ` (Pref: ${r.prefixes})` : '';
@@ -1064,7 +1095,7 @@ function editModelo(id) {
   
   const capInput = document.getElementById('mod-capacidade-caixa');
   if (capInput) {
-    capInput.value = model.capacidadeCaixa || (model.nome && model.nome.includes('FIBERLINK') ? 60 : 10);
+    capInput.value = model.capacidadeCaixa || getBoxCapacityForModel(model.nome);
   }
 
   renderModelRuleFields();
