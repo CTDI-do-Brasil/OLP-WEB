@@ -162,16 +162,16 @@ function getBoxCapacityForModel(modeloNome) {
   if (!modeloNome) return 10;
   const nomeUpper = String(modeloNome).trim().toUpperCase();
   
-  // Modelos com capacidade configurada para 60 unidades por caixa:
-  // 1. FIBERLINK 101
+  // Modelos com capacidade configurada para caixas:
+  // 1. FIBERLINK 101 = 40 unidades
   if (nomeUpper.includes('FIBERLINK 101') || nomeUpper.includes('FIBERLINK') || nomeUpper.includes('FL101') || nomeUpper.includes('FL-101')) {
-    return 60;
+    return 40;
   }
-  // 2. ZXHN F601
+  // 2. ZXHN F601 = 60 unidades
   if (nomeUpper.includes('F601') || nomeUpper.includes('ZXHN F601') || nomeUpper.includes('ZXHN-F601')) {
     return 60;
   }
-  // 3. UF-LOCO
+  // 3. UF-LOCO = 60 unidades
   if (nomeUpper.includes('UF-LOCO') || nomeUpper.includes('UF LOCO') || nomeUpper.includes('UFLOCO') || nomeUpper.includes('LOCO')) {
     return 60;
   }
@@ -227,7 +227,7 @@ function getSeedModels() {
       id: 'MOD_4',
       fabricante: 'PARKS',
       nome: 'FIBERLINK 101',
-      capacidadeCaixa: 60,
+      capacidadeCaixa: 40,
       camposCount: 1,
       rules: [
         { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: '' }
