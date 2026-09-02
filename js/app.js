@@ -30,6 +30,11 @@ let appState = {
 
 // INITIALIZATION & MOCK SEED DATA
 async function initApp() {
+  try {
+    localStorage.removeItem(STORAGE_KEYS.UNITS);
+    localStorage.removeItem('wms_units_v1');
+  } catch (e) {}
+
   initResponsiveResolution();
   await loadStateFromServer();
   checkSession();
@@ -142,9 +147,8 @@ function saveStateToStorage() {
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(appState.users));
     localStorage.setItem(STORAGE_KEYS.MODELS, JSON.stringify(appState.models));
     localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(appState.locations));
-    localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify(appState.units));
   } catch (e) {
-    console.warn("Falha ao salvar no localStorage local:", e);
+    console.warn("Falha ao salvar metadados no localStorage:", e);
   }
 }
 
@@ -7891,8 +7895,6 @@ async function salvarAjusteUnidade() {
         }
       });
     }
-
-    localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify(appState.units));
 
     // Atualizar a interface do módulo de ajuste
     carregarUnidadeParaAjuste(currentAjusteUnit);
