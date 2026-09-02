@@ -574,7 +574,7 @@ function checkSession() {
 
 function navigate(viewId) {
   // Check permission for admin views
-  if (['dashboard', 'cadastro-modelo', 'cadastro-usuario', 'cadastro-localidade'].includes(viewId) || viewId.startsWith('cadastro-defeito-')) {
+  if (['dashboard', 'cadastro-modelo', 'cadastro-usuario', 'cadastro-localidade', 'cadastro-impressora', 'ajuste-unidade'].includes(viewId) || viewId.startsWith('cadastro-defeito-')) {
     if (appState.currentUser.role !== 'ADMIN') {
       alert("Acesso restrito para administradores!");
       return;
@@ -620,6 +620,7 @@ function navigate(viewId) {
   if (viewId === 'cadastro-usuario') renderUsuariosTable();
   if (viewId === 'cadastro-localidade') renderLocalidadesTable();
   if (viewId === 'cadastro-impressora') renderPrintersTable();
+  if (viewId === 'ajuste-unidade') initAjusteUnidadeView();
   if (viewId === 'recebimento') resetRecebimentoForm();
   if (viewId === 'consulta') filterConsulta();
   if (viewId === 'embalagem') initEmbalagemView();
@@ -642,6 +643,7 @@ function updatePageTitle(viewId) {
     'cadastro-usuario': { title: 'Cadastro de Usuários', sub: 'Gestão de acessos (Administradores e Operadores)' },
     'cadastro-localidade': { title: 'Cadastro de Localidades', sub: 'Mapeamento de docas e áreas de armazenagem' },
     'cadastro-impressora': { title: 'Cadastro de Impressoras Zebra', sub: 'Gerenciamento de impressoras térmicas ZPL por IP e Posto de Trabalho' },
+    'ajuste-unidade': { title: 'Ajuste de Unidade', sub: 'Correção cadastral de Modelo e MAC com persistência no banco de dados' },
     'recebimento': { title: 'Recebimento de Unidades', sub: 'Entrada de equipamentos com validação rígida de regras' },
     'apontamento-cosmetico': { title: 'Apontamento Cosmético', sub: 'Inspeção estética e estática de unidades' },
     'apontamento-funcional': { title: 'Apontamento Funcional', sub: 'Testes de conectividade e hardware' },
@@ -1641,6 +1643,22 @@ function populateSelectDropdowns() {
     const fabs = [...new Set(appState.models.map(m => m.fabricante))];
     relFab.innerHTML = '<option value="">TODOS OS FABRICANTES</option>';
     fabs.forEach(f => relFab.innerHTML += `<option value="${f}">${f}</option>`);
+  }
+
+  // Populate Models in Ajuste de Unidade
+  const ajusteModSelect = document.getElementById('ajuste-new-modelo');
+  if (ajusteModSelect) {
+    const currentVal = ajusteModSelect.value;
+    ajusteModSelect.innerHTML = '<option value="">Selecione o modelo...</option>';
+    appState.models.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.nome;
+      opt.setAttribute('data-fabricante', m.fabricante);
+      opt.setAttribute('data-model-id', m.id);
+      opt.innerText = `${m.fabricante} - ${m.nome}`;
+      ajusteModSelect.appendChild(opt);
+    });
+    if (currentVal) ajusteModSelect.value = currentVal;
   }
 
   // Populate Defect Codes Selects
@@ -4972,6 +4990,8 @@ function filterConsulta() {
   const tbody = document.getElementById('table-consulta-body');
   tbody.innerHTML = '';
 
+  const isAdmin = appState.currentUser && appState.currentUser.role === 'ADMIN';
+
   filtered.forEach(u => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -4980,10 +5000,14 @@ function filterConsulta() {
       <td><strong>${u.fabricante} ${u.modelo}</strong></td>
       <td>${u.dataRecebimento}</td>
       <td><span class="badge ${getStatusBadgeClass(u.status)}">${u.status}</span></td>
-      <td>
+      <td style="white-space: nowrap; display: flex; gap: 6px;">
         <button class="btn btn-outline btn-sm" onclick="openUnitTimelineModal('${u.id}')">
           <i class="fa-solid fa-eye"></i> Histórico
         </button>
+        ${isAdmin ? `
+        <button class="btn btn-warning btn-sm" onclick="iniciarAjusteDireto('${u.id}')" title="Ajustar Modelo/MAC">
+          <i class="fa-solid fa-wrench"></i> Ajustar
+        </button>` : ''}
       </td>
     `;
     tbody.appendChild(tr);
@@ -5000,6 +5024,8 @@ function openUnitTimelineModal(unitId) {
     switch (ev.tipo) {
       case 'RECEBIMENTO':
         return { itemClass: 'info', badge: '<span class="badge badge-primary"><i class="fa-solid fa-dolly"></i> RECEBIMENTO</span>' };
+      case 'AJUSTE_ADMIN':
+        return { itemClass: 'warning', badge: '<span class="badge badge-warning"><i class="fa-solid fa-wrench"></i> AJUSTE ADMINISTRATIVO</span>' };
       case 'COSMETICO':
         const cosOk = (ev.extra && ev.extra.resultado === 'APROVADO') || (ev.statusNovo === 'COSMETICO_OK') || (ev.titulo && ev.titulo.includes('APROVADO'));
         return { 
@@ -7475,4 +7501,416 @@ function reimprimirEtiquetaCaixaSucataDireto(query) {
   playSuccessBeep();
   showToast(`Caixa de sucata ${targetCaixaId} carregada para reimpressão!`);
 }
+
+/* ==========================================================================
+   MENU AJUSTE DE UNIDADES (EXCLUSIVO ADMIN) - CORREÇÃO DE MODELO E MAC
+   ========================================================================== */
+
+let currentAjusteUnit = null;
+
+function initAjusteUnidadeView() {
+  if (!appState.currentUser || appState.currentUser.role !== 'ADMIN') {
+    alert("Acesso restrito para administradores!");
+    navigate('dashboard');
+    return;
+  }
+  populateSelectDropdowns();
+  const searchInput = document.getElementById('ajuste-search-input');
+  if (searchInput) {
+    searchInput.focus();
+  }
+}
+
+function iniciarAjusteDireto(unitId) {
+  if (!appState.currentUser || appState.currentUser.role !== 'ADMIN') {
+    alert("Acesso restrito para administradores!");
+    return;
+  }
+  navigate('ajuste-unidade');
+  const unit = appState.units.find(u => u.id === unitId || u.serial === unitId);
+  if (unit) {
+    const searchInput = document.getElementById('ajuste-search-input');
+    if (searchInput) searchInput.value = unit.serial || unit.id;
+    carregarUnidadeParaAjuste(unit);
+  }
+}
+
+function searchUnidadeParaAjuste() {
+  const searchInput = document.getElementById('ajuste-search-input');
+  if (!searchInput) return;
+
+  const term = (searchInput.value || '').trim().toUpperCase();
+  if (!term) {
+    showAjusteFeedback('Por favor, informe ou bipe o Serial, GPON ou MAC da unidade.', 'danger');
+    searchInput.focus();
+    return;
+  }
+
+  // Buscar em appState.units
+  const unit = appState.units.find(u => 
+    (u.serial && u.serial.toUpperCase() === term) ||
+    (u.gpon && u.gpon.toUpperCase() === term) ||
+    (u.mac && u.mac.toUpperCase() === term) ||
+    (u.id && u.id.toUpperCase() === term)
+  );
+
+  if (!unit) {
+    showAjusteFeedback(`Unidade não encontrada no sistema com o termo "${term}". Verifique se o equipamento foi recebido.`, 'danger');
+    const editContainer = document.getElementById('ajuste-edit-container');
+    if (editContainer) editContainer.classList.add('hidden');
+    currentAjusteUnit = null;
+    playErrorBeep();
+    return;
+  }
+
+  carregarUnidadeParaAjuste(unit);
+}
+
+function showAjusteFeedback(msg, type = 'info') {
+  const feedbackEl = document.getElementById('ajuste-search-feedback');
+  if (!feedbackEl) return;
+  feedbackEl.className = `alert alert-${type}`;
+  feedbackEl.innerHTML = `<i class="fa-solid fa-${type === 'danger' ? 'triangle-exclamation' : (type === 'success' ? 'circle-check' : 'circle-info')}"></i> ${msg}`;
+  feedbackEl.classList.remove('hidden');
+}
+
+function carregarUnidadeParaAjuste(unit) {
+  currentAjusteUnit = unit;
+  const feedbackEl = document.getElementById('ajuste-search-feedback');
+  if (feedbackEl) feedbackEl.classList.add('hidden');
+
+  // Preencher Painel de Dados Atuais
+  document.getElementById('ajuste-curr-serial').innerText = unit.serial || '-';
+  document.getElementById('ajuste-curr-gpon').innerText = unit.gpon || '-';
+  document.getElementById('ajuste-curr-mac').innerText = unit.mac || '(Não preenchido)';
+  document.getElementById('ajuste-curr-fabricante').innerText = unit.fabricante || '-';
+  document.getElementById('ajuste-curr-modelo').innerText = unit.modelo || '-';
+  document.getElementById('ajuste-curr-localidade').innerText = unit.localidade || '-';
+  
+  const statusEl = document.getElementById('ajuste-curr-status');
+  if (statusEl) {
+    statusEl.className = `badge ${getStatusBadgeClass(unit.status)}`;
+    statusEl.innerText = unit.status || '-';
+  }
+  
+  document.getElementById('ajuste-curr-data').innerText = unit.dataRecebimento || '-';
+
+  const caixaPalletEl = document.getElementById('ajuste-curr-caixa-pallet');
+  if (caixaPalletEl) {
+    if (unit.pallet && unit.pallet.palletId) {
+      caixaPalletEl.innerHTML = `<i class="fa-solid fa-pallet"></i> Pallet: ${unit.pallet.palletId}`;
+      caixaPalletEl.className = 'badge badge-primary';
+    } else if (unit.embalagem && unit.embalagem.caixaId) {
+      caixaPalletEl.innerHTML = `<i class="fa-solid fa-box"></i> Caixa: ${unit.embalagem.caixaId}`;
+      caixaPalletEl.className = 'badge badge-info';
+    } else {
+      caixaPalletEl.innerText = 'Nenhuma (Avulsa)';
+      caixaPalletEl.className = 'badge badge-secondary';
+    }
+  }
+
+  // Preencher Formulário de Edição
+  populateSelectDropdowns();
+  const modSelect = document.getElementById('ajuste-new-modelo');
+  if (modSelect) {
+    modSelect.value = unit.modelo || '';
+  }
+  
+  const fabInput = document.getElementById('ajuste-new-fabricante');
+  if (fabInput) {
+    fabInput.value = unit.fabricante || '';
+  }
+
+  const macInput = document.getElementById('ajuste-new-mac');
+  if (macInput) {
+    macInput.value = unit.mac || '';
+  }
+
+  const motivoInput = document.getElementById('ajuste-motivo');
+  if (motivoInput) {
+    motivoInput.value = '';
+  }
+
+  handleAjusteModeloChange();
+
+  // Renderizar Linha do Tempo de Histórico
+  renderAjusteHistorico(unit);
+
+  const editContainer = document.getElementById('ajuste-edit-container');
+  if (editContainer) {
+    editContainer.classList.remove('hidden');
+  }
+
+  playSuccessBeep();
+}
+
+function handleAjusteModeloChange() {
+  const modSelect = document.getElementById('ajuste-new-modelo');
+  const fabInput = document.getElementById('ajuste-new-fabricante');
+  const rulesInfo = document.getElementById('ajuste-mac-rules-info');
+  if (!modSelect || !fabInput) return;
+
+  const selectedModelName = modSelect.value;
+  const modelObj = appState.models.find(m => m.nome === selectedModelName);
+
+  if (modelObj) {
+    fabInput.value = modelObj.fabricante;
+    
+    // Validar regras do MAC
+    const macRule = (modelObj.rules || []).find(r => r.fieldName === 'MAC');
+    if (macRule && rulesInfo) {
+      let ruleDesc = 'Regra do Modelo para MAC: ';
+      if (macRule.lengthType === 'EXACT') {
+        ruleDesc += `Exige exatamente ${macRule.exactLength} caracteres`;
+      } else if (macRule.lengthType === 'RANGE') {
+        ruleDesc += `Tamanho entre ${macRule.minLength} e ${macRule.maxLength} caracteres`;
+      }
+      if (macRule.prefixes) {
+        ruleDesc += ` | Prefixos aceitos: ${macRule.prefixes}`;
+      }
+      rulesInfo.innerText = ruleDesc;
+      rulesInfo.style.color = 'var(--info)';
+    } else if (rulesInfo) {
+      rulesInfo.innerText = 'Nenhuma regra de validação rígida de MAC configurada para este modelo.';
+      rulesInfo.style.color = 'var(--text-muted)';
+    }
+  } else {
+    fabInput.value = '';
+    if (rulesInfo) rulesInfo.innerText = '';
+  }
+}
+
+function renderAjusteHistorico(unit) {
+  const container = document.getElementById('ajuste-historico-container');
+  if (!container) return;
+
+  const historico = obterHistoricoCompletoUnidade(unit);
+  if (!historico || historico.length === 0) {
+    container.innerHTML = '<p class="text-muted" style="text-align: center; margin: 1rem 0;">Nenhum apontamento no histórico.</p>';
+    return;
+  }
+
+  const getBadgeInfo = (ev) => {
+    switch (ev.tipo) {
+      case 'RECEBIMENTO':
+        return { cls: 'info', icon: 'fa-dolly', label: 'RECEBIMENTO', badgeCls: 'badge-primary' };
+      case 'AJUSTE_ADMIN':
+        return { cls: 'warning', icon: 'fa-wrench', label: 'AJUSTE ADMINISTRATIVO', badgeCls: 'badge-warning' };
+      case 'COSMETICO':
+        return { cls: 'success', icon: 'fa-sparkles', label: 'COSMÉTICO', badgeCls: 'badge-success' };
+      case 'FUNCIONAL':
+        return { cls: 'success', icon: 'fa-plug-circle-check', label: 'FUNCIONAL', badgeCls: 'badge-success' };
+      case 'REPARO_ELETRONICO':
+        return { cls: 'warning', icon: 'fa-screwdriver-wrench', label: 'REPARO ELETRÔNICO', badgeCls: 'badge-warning' };
+      case 'EMBALAGEM':
+        return { cls: 'success', icon: 'fa-box-open', label: 'EMBALAGEM', badgeCls: 'badge-success' };
+      case 'EXPEDICAO':
+        return { cls: 'purple', icon: 'fa-truck-fast', label: 'EXPEDIÇÃO', badgeCls: 'badge' };
+      case 'SUCATA':
+        return { cls: 'danger', icon: 'fa-trash-can', label: 'SUCATA', badgeCls: 'badge-danger' };
+      default:
+        return { cls: 'info', icon: 'fa-circle-info', label: ev.tipo, badgeCls: 'badge-secondary' };
+    }
+  };
+
+  container.innerHTML = `
+    <div class="timeline">
+      ${historico.map(ev => {
+        const bi = getBadgeInfo(ev);
+        return `
+          <div class="timeline-item ${bi.cls}">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <div class="timeline-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <div>
+                  <span class="badge ${bi.badgeCls}"><i class="fa-solid ${bi.icon}"></i> ${bi.label}</span>
+                  <strong style="margin-left: 8px;">${ev.titulo || ''}</strong>
+                </div>
+                <small class="text-muted"><i class="fa-regular fa-clock"></i> ${ev.data || '-'}</small>
+              </div>
+              <p class="timeline-desc" style="margin: 0 0 4px; font-size: 0.9rem;">${ev.descricao || '-'}</p>
+              <div class="timeline-footer" style="font-size: 0.8rem; color: var(--text-muted);">
+                <span><i class="fa-solid fa-user"></i> Operador/Admin: <b>${ev.operador || '-'}</b></span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+function limparAjusteUnidade() {
+  currentAjusteUnit = null;
+  const searchInput = document.getElementById('ajuste-search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    searchInput.focus();
+  }
+  const feedbackEl = document.getElementById('ajuste-search-feedback');
+  if (feedbackEl) feedbackEl.classList.add('hidden');
+  const editContainer = document.getElementById('ajuste-edit-container');
+  if (editContainer) editContainer.classList.add('hidden');
+}
+
+async function salvarAjusteUnidade() {
+  if (!currentAjusteUnit) {
+    alert("Nenhuma unidade selecionada para ajuste!");
+    return;
+  }
+
+  if (!appState.currentUser || appState.currentUser.role !== 'ADMIN') {
+    alert("Operação restrita para administradores!");
+    return;
+  }
+
+  const modSelect = document.getElementById('ajuste-new-modelo');
+  const fabInput = document.getElementById('ajuste-new-fabricante');
+  const macInput = document.getElementById('ajuste-new-mac');
+  const motivoInput = document.getElementById('ajuste-motivo');
+
+  const newModelo = modSelect ? modSelect.value.trim() : '';
+  const newFabricante = fabInput ? fabInput.value.trim() : '';
+  const newMac = macInput ? macInput.value.trim().toUpperCase() : '';
+  const motivo = motivoInput ? motivoInput.value.trim() : '';
+
+  if (!newModelo) {
+    alert("Por favor, selecione o novo Modelo para a unidade!");
+    modSelect.focus();
+    return;
+  }
+
+  if (!motivo) {
+    alert("Por favor, preencha o Motivo do Ajuste para fins de auditoria!");
+    motivoInput.focus();
+    return;
+  }
+
+  // Validação de duplicidade do novo MAC com outras unidades
+  if (newMac) {
+    const existingUnitWithMac = appState.units.find(u => 
+      u.id !== currentAjusteUnit.id && 
+      u.serial !== currentAjusteUnit.serial && 
+      u.mac && u.mac.toUpperCase() === newMac
+    );
+    if (existingUnitWithMac) {
+      const confirmDup = confirm(`Atenção: O endereço MAC "${newMac}" já está cadastrado na unidade com Serial "${existingUnitWithMac.serial}". Deseja continuar mesmo assim?`);
+      if (!confirmDup) return;
+    }
+  }
+
+  // Detecção de mudanças
+  const changes = [];
+  const oldModelo = currentAjusteUnit.modelo;
+  const oldFabricante = currentAjusteUnit.fabricante;
+  const oldMac = currentAjusteUnit.mac || '';
+
+  if (oldModelo !== newModelo) {
+    changes.push(`Modelo: "${oldModelo}" ➔ "${newModelo}"`);
+  }
+  if (oldFabricante !== newFabricante) {
+    changes.push(`Fabricante: "${oldFabricante}" ➔ "${newFabricante}"`);
+  }
+  if (oldMac !== newMac) {
+    changes.push(`MAC: "${oldMac || '(vazio)'}" ➔ "${newMac || '(vazio)'}"`);
+  }
+
+  if (changes.length === 0) {
+    alert("Nenhum dado (Modelo ou MAC) foi alterado. Nenhum ajuste necessário.");
+    return;
+  }
+
+  // Montar entrada de auditoria no histórico
+  const currentHistory = Array.isArray(currentAjusteUnit.historico) ? [...currentAjusteUnit.historico] : [];
+  const histEntry = {
+    id: 'HIST_' + Date.now() + '_ajuste',
+    tipo: 'AJUSTE_ADMIN',
+    titulo: 'Ajuste Cadastral de Modelo/MAC',
+    descricao: `${changes.join(' | ')}. Motivo: ${motivo}`,
+    data: new Date().toISOString().replace('T', ' ').slice(0, 19),
+    operador: appState.currentUser.login,
+    statusNovo: currentAjusteUnit.status,
+    extra: {
+      modeloAnterior: oldModelo,
+      modeloNovo: newModelo,
+      fabricanteAnterior: oldFabricante,
+      fabricanteNovo: newFabricante,
+      macAnterior: oldMac,
+      macNovo: newMac,
+      motivo: motivo
+    }
+  };
+  currentHistory.push(histEntry);
+
+  const payload = {
+    modelo: newModelo,
+    fabricante: newFabricante,
+    mac: newMac,
+    historico: currentHistory
+  };
+
+  try {
+    const res = await fetch(`/api/units/${currentAjusteUnit.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Erro ao persistir ajuste no servidor');
+    }
+
+    // Atualizar no estado local em memória
+    currentAjusteUnit.modelo = newModelo;
+    currentAjusteUnit.fabricante = newFabricante;
+    currentAjusteUnit.mac = newMac;
+    currentAjusteUnit.historico = currentHistory;
+
+    // Atualizar no array global appState.units
+    const unitIdx = appState.units.findIndex(u => u.id === currentAjusteUnit.id);
+    if (unitIdx !== -1) {
+      appState.units[unitIdx] = { ...currentAjusteUnit };
+    }
+
+    // Sincronizar em caixas no appState caso a unidade esteja em caixa
+    if (appState.caixas && Array.isArray(appState.caixas)) {
+      appState.caixas.forEach(cx => {
+        if (cx.unidades && Array.isArray(cx.unidades)) {
+          cx.unidades = cx.unidades.map(u => {
+            if (u.id === currentAjusteUnit.id || u.serial === currentAjusteUnit.serial) {
+              return {
+                ...u,
+                modelo: newModelo,
+                fabricante: newFabricante,
+                mac: newMac
+              };
+            }
+            return u;
+          });
+        }
+      });
+    }
+
+    localStorage.setItem(STORAGE_KEYS.UNITS, JSON.stringify(appState.units));
+
+    // Atualizar a interface do módulo de ajuste
+    carregarUnidadeParaAjuste(currentAjusteUnit);
+    showAjusteFeedback(`Ajuste cadastral realizado e salvo com sucesso no banco de dados! (${changes.join(', ')})`, 'success');
+    
+    playSuccessBeep();
+    showToast('Ajuste salvo com sucesso no banco de dados!');
+
+    // Atualizar consultas e relatórios se renderizados
+    filterConsulta();
+    if (appState.currentReportSubmenu) {
+      renderRelatorioTable();
+    }
+  } catch (err) {
+    console.error('Erro ao salvar ajuste de unidade:', err);
+    playErrorBeep();
+    alert(`Erro ao salvar ajuste: ${err.message}`);
+  }
+}
+
 

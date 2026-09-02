@@ -98,6 +98,10 @@
             <i class="fa-solid fa-print"></i>
             <span>Impressoras Zebra</span>
           </a>
+          <a href="#ajuste-unidade" class="nav-item nav-sub" onclick="navigate('ajuste-unidade')">
+            <i class="fa-solid fa-wrench"></i>
+            <span>Ajuste de Unidade</span>
+          </a>
 
           <!-- CÓDIGOS DE DEFEITO Accordion -->
           <div class="nav-accordion">
@@ -757,6 +761,144 @@
                   </table>
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4.1 MENU AJUSTE DE UNIDADE (ADMIN ONLY) -->
+        <section id="view-ajuste-unidade" class="page-view admin-only">
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-wrench"></i> Ajuste e Correção de Unidades</h3>
+              <span class="badge badge-warning"><i class="fa-solid fa-shield-halved"></i> Perfil Administrador</span>
+            </div>
+            <div class="card-body">
+              <p class="text-muted" style="margin-bottom: 1.25rem;">
+                Módulo exclusivo para correção cadastral de <b>Modelo</b> e <b>MAC</b> de unidades registradas. As alterações são sincronizadas no banco de dados e refletem em todos os relatórios e caixas.
+              </p>
+
+              <!-- BUSCA / LEITURA -->
+              <div class="glass-panel" style="padding: 1.25rem; border-radius: var(--radius-md); margin-bottom: 1.5rem;">
+                <label for="ajuste-search-input" style="font-weight: 600; display: block; margin-bottom: 0.5rem;">
+                  <i class="fa-solid fa-barcode"></i> Bipar ou Buscar Unidade (Serial, GPON ou MAC)
+                </label>
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                  <input type="text" id="ajuste-search-input" class="form-control" placeholder="Digite ou bipe o Serial, GPON ou MAC..." style="flex: 1; min-width: 250px; text-transform: uppercase;" onkeydown="if (event.key === 'Enter') { event.preventDefault(); searchUnidadeParaAjuste(); }" autocomplete="off">
+                  <button type="button" class="btn btn-primary" onclick="searchUnidadeParaAjuste()">
+                    <i class="fa-solid fa-magnifying-glass"></i> Buscar Unidade
+                  </button>
+                  <button type="button" class="btn btn-outline" onclick="limparAjusteUnidade()">
+                    <i class="fa-solid fa-rotate-left"></i> Limpar
+                  </button>
+                </div>
+                <div id="ajuste-search-feedback" class="alert hidden" style="margin-top: 1rem; margin-bottom: 0;"></div>
+              </div>
+
+              <!-- DETALHES E FORMULÁRIO DE EDIÇÃO (EXIBIDO APÓS BUSCA) -->
+              <div id="ajuste-edit-container" class="hidden">
+                <div class="grid-2col" style="gap: 1.5rem;">
+                  
+                  <!-- PAINEL ESQUERDO: DADOS ATUAIS NO SISTEMA -->
+                  <div class="glass-panel" style="padding: 1.25rem; border-radius: var(--radius-md);">
+                    <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; color: var(--text-main);">
+                      <i class="fa-solid fa-circle-info" style="color: var(--primary);"></i> Dados Atuais Cadastrados
+                    </h4>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">Serial:</span>
+                        <strong id="ajuste-curr-serial" style="font-family: var(--font-mono);">-</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">GPON:</span>
+                        <span id="ajuste-curr-gpon" style="font-family: var(--font-mono);">-</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">MAC Atual:</span>
+                        <strong id="ajuste-curr-mac" style="font-family: var(--font-mono); color: var(--info);">-</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">Fabricante Atual:</span>
+                        <span id="ajuste-curr-fabricante" style="font-weight: 600;">-</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">Modelo Atual:</span>
+                        <strong id="ajuste-curr-modelo" style="color: var(--primary);">-</strong>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">Localidade:</span>
+                        <span id="ajuste-curr-localidade">-</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">Status do Fluxo:</span>
+                        <span id="ajuste-curr-status" class="badge badge-info">-</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">
+                        <span class="text-muted">Data Recebimento:</span>
+                        <span id="ajuste-curr-data">-</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between;">
+                        <span class="text-muted">Caixa / Pallet:</span>
+                        <span id="ajuste-curr-caixa-pallet" class="badge badge-secondary">-</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- PAINEL DIREITO: FORMULÁRIO DE CORREÇÃO -->
+                  <div class="glass-panel" style="padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid rgba(59, 130, 246, 0.3);">
+                    <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; color: var(--primary);">
+                      <i class="fa-solid fa-pen-to-square"></i> Campos para Ajuste
+                    </h4>
+
+                    <form id="form-ajuste-unidade" onsubmit="event.preventDefault(); salvarAjusteUnidade();">
+                      <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="ajuste-new-modelo"><i class="fa-solid fa-microchip"></i> Novo Modelo *</label>
+                        <select id="ajuste-new-modelo" required onchange="handleAjusteModeloChange()">
+                          <option value="">Selecione o modelo...</option>
+                        </select>
+                      </div>
+
+                      <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="ajuste-new-fabricante"><i class="fa-solid fa-industry"></i> Fabricante (Atualizado Automaticamente)</label>
+                        <input type="text" id="ajuste-new-fabricante" readonly style="background: rgba(0,0,0,0.2); cursor: not-allowed;">
+                      </div>
+
+                      <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="ajuste-new-mac"><i class="fa-solid fa-network-wired"></i> Novo MAC</label>
+                        <input type="text" id="ajuste-new-mac" placeholder="Digite o MAC corrigido..." style="text-transform: uppercase; font-family: var(--font-mono);" autocomplete="off">
+                        <small id="ajuste-mac-rules-info" class="text-muted" style="display: block; margin-top: 4px; font-size: 0.8rem;"></small>
+                      </div>
+
+                      <div class="form-group" style="margin-bottom: 1.25rem;">
+                        <label for="ajuste-motivo"><i class="fa-solid fa-comment-dots"></i> Motivo do Ajuste / Observação *</label>
+                        <input type="text" id="ajuste-motivo" required placeholder="Ex: Modelo cadastrado incorretamente no recebimento" autocomplete="off">
+                      </div>
+
+                      <div style="display: flex; gap: 10px; margin-top: 1.5rem;">
+                        <button type="submit" class="btn btn-success" style="flex: 1;">
+                          <i class="fa-solid fa-floppy-disk"></i> Salvar Correção no Banco
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="limparAjusteUnidade()">
+                          <i class="fa-solid fa-xmark"></i> Cancelar
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                </div>
+
+                <!-- LINHA DO TEMPO / HISTÓRICO DA UNIDADE -->
+                <div class="margin-top">
+                  <h4 style="margin-bottom: 1rem; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-clock-rotate-left"></i> Histórico Completo de Auditoria da Unidade
+                  </h4>
+                  <div id="ajuste-historico-container" class="timeline-container glass-panel" style="padding: 1.25rem; border-radius: var(--radius-md);">
+                    <!-- Dynamic timeline items -->
+                  </div>
+                </div>
+
+              </div>
+
             </div>
           </div>
         </section>

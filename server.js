@@ -450,6 +450,34 @@ app.put('/api/units/:id', async (req, res) => {
       values.push(body.status);
       fields.push(`status = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(body, 'modelo')) {
+      values.push(body.modelo);
+      fields.push(`modelo = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'fabricante')) {
+      values.push(body.fabricante);
+      fields.push(`fabricante = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'mac')) {
+      values.push(body.mac);
+      fields.push(`mac = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'serial')) {
+      values.push(body.serial);
+      fields.push(`serial = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'gpon')) {
+      values.push(body.gpon);
+      fields.push(`gpon = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'localidade')) {
+      values.push(body.localidade);
+      fields.push(`localidade = $${values.length}`);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'operador')) {
+      values.push(body.operador);
+      fields.push(`operador = $${values.length}`);
+    }
     if (Object.prototype.hasOwnProperty.call(body, 'cosmetico')) {
       values.push(body.cosmetico ? JSON.stringify(body.cosmetico) : null);
       fields.push(`cosmetico = $${values.length}`);
@@ -516,10 +544,41 @@ app.put('/api/units/:id', async (req, res) => {
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         ON CONFLICT (id) DO UPDATE SET
           status = EXCLUDED.status,
+          modelo = EXCLUDED.modelo,
+          fabricante = EXCLUDED.fabricante,
+          mac = EXCLUDED.mac,
           embalagem = EXCLUDED.embalagem,
           pallet = EXCLUDED.pallet,
           historico = EXCLUDED.historico
       `, [id, serial, gpon, mac, modelo, fabricante, localidade, operador, dataRecebimento, status, cosmetico, funcional, embalagem, pallet, expedicao, sucata, reparo_eletronico, historico]);
+    } else {
+      // Se atualizou modelo ou mac, sincroniza em caixas caso a unidade esteja associada
+      if (body.modelo || body.mac || body.fabricante) {
+        try {
+          const caixasComUnidade = await pool.query(`SELECT id, unidades, gpon_ids FROM caixas WHERE unidades::text LIKE $1`, [`%${id}%`]);
+          for (const cx of caixasComUnidade.rows) {
+            let cxUnidades = cx.unidades || [];
+            let changed = false;
+            cxUnidades = cxUnidades.map(u => {
+              if (u.id === id || u.serial === id || (body.serial && u.serial === body.serial)) {
+                changed = true;
+                return {
+                  ...u,
+                  ...(body.modelo ? { modelo: body.modelo } : {}),
+                  ...(body.fabricante ? { fabricante: body.fabricante } : {}),
+                  ...(body.mac !== undefined ? { mac: body.mac } : {})
+                };
+              }
+              return u;
+            });
+            if (changed) {
+              await pool.query(`UPDATE caixas SET unidades = $1 WHERE id = $2`, [JSON.stringify(cxUnidades), cx.id]);
+            }
+          }
+        } catch (syncErr) {
+          console.error('[Server] Erro ao sincronizar caixas durante ajuste de unidade:', syncErr.message);
+        }
+      }
     }
 
     res.json({ success: true, message: 'Unidade salva com sucesso!' });
