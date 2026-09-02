@@ -12,6 +12,30 @@ const STORAGE_KEYS = {
   THEME: 'wms_theme_v1'
 };
 
+// Limpeza preventiva de chaves pesadas legadas para evitar estouro de cota (5MB) no navegador
+try {
+  localStorage.removeItem('wms_units_v1');
+  localStorage.removeItem('wms_models_v1');
+  localStorage.removeItem('wms_users_v1');
+  localStorage.removeItem('wms_locations_v1');
+} catch (e) {}
+
+function safeStorageSetItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    try {
+      localStorage.removeItem('wms_units_v1');
+      localStorage.removeItem('wms_models_v1');
+      localStorage.removeItem('wms_users_v1');
+      localStorage.removeItem('wms_locations_v1');
+      localStorage.setItem(key, value);
+    } catch (err) {
+      console.warn(`[Storage] Não foi possível salvar a chave "${key}" no localStorage:`, err.message);
+    }
+  }
+}
+
 // Application State
 let appState = {
   currentUser: null,
@@ -30,11 +54,6 @@ let appState = {
 
 // INITIALIZATION & MOCK SEED DATA
 async function initApp() {
-  try {
-    localStorage.removeItem(STORAGE_KEYS.UNITS);
-    localStorage.removeItem('wms_units_v1');
-  } catch (e) {}
-
   initResponsiveResolution();
   await loadStateFromServer();
   checkSession();
@@ -143,13 +162,7 @@ async function loadStateFromServer() {
 }
 
 function saveStateToStorage() {
-  try {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(appState.users));
-    localStorage.setItem(STORAGE_KEYS.MODELS, JSON.stringify(appState.models));
-    localStorage.setItem(STORAGE_KEYS.LOCATIONS, JSON.stringify(appState.locations));
-  } catch (e) {
-    console.warn("Falha ao salvar metadados no localStorage:", e);
-  }
+  // Dados persistidos diretamente no banco PostgreSQL via API REST
 }
 
 // SEED DATA GENERATORS
@@ -529,7 +542,7 @@ async function handleLoginSubmit(e) {
 
 function loginUser(user) {
   appState.currentUser = user;
-  localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
+  safeStorageSetItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(user));
   
   const loginModal = document.getElementById('login-modal');
   if (loginModal) loginModal.classList.remove('active');
@@ -713,7 +726,7 @@ function toggleSidebarCollapse() {
   } else {
     document.body.classList.toggle('sidebar-collapsed');
     const isCollapsed = document.body.classList.contains('sidebar-collapsed');
-    localStorage.setItem('wms_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+    safeStorageSetItem('wms_sidebar_collapsed', isCollapsed ? 'true' : 'false');
   }
 }
 
@@ -1201,7 +1214,7 @@ async function saveUsuario(e) {
           appState.currentUser.nome = nome;
           appState.currentUser.role = role;
           appState.currentUser.senha = senha;
-          localStorage.setItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(appState.currentUser));
+          safeStorageSetItem(STORAGE_KEYS.CURRENT_USER, JSON.stringify(appState.currentUser));
         }
         
         alert(`Usuário ${editingUserLogin} atualizado com sucesso!`);
@@ -1559,7 +1572,7 @@ async function reimprimirEtiquetaCaixa(e) {
   // Obter a impressora selecionada no form ou a padrão
   const reimpSelectVal = document.getElementById('reimp-printer-select') ? document.getElementById('reimp-printer-select').value : null;
   if (reimpSelectVal) {
-    localStorage.setItem('wms_selected_printer_emb', reimpSelectVal);
+    safeStorageSetItem('wms_selected_printer_emb', reimpSelectVal);
   }
 
   if (resultInfo) {
@@ -1580,10 +1593,10 @@ async function reimprimirEtiquetaCaixa(e) {
 function saveSelectedPrinterPreference(viewType) {
   if (viewType === 'embalagem' || viewType === 'embalagem_sucata') {
     const el = document.getElementById('emb-printer-select') || document.getElementById('emb-sucata-printer-select');
-    if (el) localStorage.setItem('wms_selected_printer_emb', el.value);
+    if (el) safeStorageSetItem('wms_selected_printer_emb', el.value);
   } else if (viewType === 'pallet' || viewType === 'pallet_sucata') {
     const el = document.getElementById('pallet-printer-select');
-    if (el) localStorage.setItem('wms_selected_printer_pallet', el.value);
+    if (el) safeStorageSetItem('wms_selected_printer_pallet', el.value);
   }
 }
 
