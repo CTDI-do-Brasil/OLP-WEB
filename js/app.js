@@ -192,6 +192,10 @@ function getBoxCapacityForModel(modeloNome) {
   if (nomeUpper.includes('UF-LOCO') || nomeUpper.includes('UF LOCO') || nomeUpper.includes('UFLOCO') || nomeUpper.includes('LOCO')) {
     return 60;
   }
+  // 4. WS7001 = 30 unidades
+  if (nomeUpper.includes('WS7001') || nomeUpper.includes('WS-7001') || nomeUpper.includes('WS 7001')) {
+    return 30;
+  }
   
   // Se o modelo estiver cadastrado com capacidade customizada
   if (appState && Array.isArray(appState.models)) {
@@ -266,6 +270,17 @@ function getSeedModels() {
       fabricante: 'UBIQUITI',
       nome: 'UF-LOCO',
       capacidadeCaixa: 60,
+      camposCount: 2,
+      rules: [
+        { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: '' },
+        { fieldName: 'MAC', lengthType: 'RANGE', minLength: 12, maxLength: 17, prefixes: '' }
+      ]
+    },
+    {
+      id: 'MOD_7',
+      fabricante: 'HUAWEI',
+      nome: 'WS7001',
+      capacidadeCaixa: 30,
       camposCount: 2,
       rules: [
         { fieldName: 'SERIAL', lengthType: 'RANGE', minLength: 6, maxLength: 30, prefixes: '' },
