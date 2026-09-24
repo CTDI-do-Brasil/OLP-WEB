@@ -1216,8 +1216,13 @@
         <!-- 8. MENU EMBALAGEM VIEW -->
         <section id="view-embalagem" class="page-view">
           <div class="card glass-card">
-            <div class="card-header">
+            <div class="card-header flex-between">
               <h3><i class="fa-solid fa-box-open"></i> Processo de Embalagem (Formação de Caixa)</h3>
+              <div class="header-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="sincronizarCaixaManualmente()">
+                  <i class="fa-solid fa-rotate"></i> Atualizar
+                </button>
+              </div>
             </div>
             <div class="card-body">
 
@@ -1256,6 +1261,9 @@
                   <div class="flex-between">
                     <h4><i class="fa-solid fa-boxes-stacked"></i> Resumo da Caixa Atual</h4>
                     <div class="flex-row" style="gap: 5px;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="sincronizarCaixaManualmente()" title="Recarregar Unidades e Caixa do Servidor">
+                        <i class="fa-solid fa-rotate"></i> Atualizar
+                      </button>
                       <button type="button" class="btn btn-primary btn-sm" onclick="abrirModalConteudoCaixa()" title="Visualizar Conteúdo Detalhado">
                         <i class="fa-solid fa-eye"></i> Ver Conteúdo
                       </button>
@@ -1683,8 +1691,15 @@
         <section id="view-embalagem-sucata" class="page-view">
           <div class="card glass-card">
             <div class="card-header flex-between">
-              <h3><i class="fa-solid fa-box-open" style="color: #f87171;"></i> Processo de Embalagem - Caixas de Sucata</h3>
-              <span class="badge badge-danger"><i class="fa-solid fa-trash-can"></i> MÓDULO SUCATA</span>
+              <div class="flex-row" style="align-items: center; gap: 10px;">
+                <h3><i class="fa-solid fa-box-open" style="color: #f87171;"></i> Processo de Embalagem - Caixas de Sucata</h3>
+                <span class="badge badge-danger"><i class="fa-solid fa-trash-can"></i> MÓDULO SUCATA</span>
+              </div>
+              <div class="header-actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="sincronizarCaixaSucataManualmente()">
+                  <i class="fa-solid fa-rotate"></i> Atualizar
+                </button>
+              </div>
             </div>
             <div class="card-body">
 
@@ -1723,6 +1738,9 @@
                   <div class="flex-between">
                     <h4><i class="fa-solid fa-boxes-stacked" style="color: #f87171;"></i> Resumo da Caixa (Sucata)</h4>
                     <div class="flex-row" style="gap: 5px;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="sincronizarCaixaSucataManualmente()" title="Recarregar Unidades e Caixa de Sucata do Servidor">
+                        <i class="fa-solid fa-rotate"></i> Atualizar
+                      </button>
                       <button type="button" class="btn btn-primary btn-sm" onclick="abrirModalConteudoCaixaSucata()" title="Visualizar Conteúdo Detalhado">
                         <i class="fa-solid fa-eye"></i> Ver Conteúdo
                       </button>

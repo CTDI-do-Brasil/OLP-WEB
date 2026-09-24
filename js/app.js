@@ -2616,7 +2616,24 @@ async function generateNextCaixaCodeFromServer() {
   }
 }
 
+async function sincronizarCaixaManualmente() {
+  showToast("Sincronizando dados da caixa com o servidor...");
+  await loadStateFromServer();
+  const codeField = document.getElementById('emb-caixa-id');
+  if (codeField) {
+    if (!codeField.value) {
+      const code = await fetchCurrentCaixaCodeFromServer();
+      codeField.value = code;
+    }
+    updateEmbalagemBoxSummary();
+  }
+  carregarListaTodasCaixas();
+  showToast("Dados da Caixa atualizados com sucesso!");
+  playSuccessBeep();
+}
+
 async function initEmbalagemView() {
+  await loadStateFromServer();
   const codeField = document.getElementById('emb-caixa-id');
   if (codeField) {
     if (!codeField.value) {
@@ -5897,6 +5914,22 @@ async function generateNextCaixaSucataCodeFromServer() {
     alert("Erro ao gerar novo código de caixa de sucata no servidor!");
     return null;
   }
+}
+
+async function sincronizarCaixaSucataManualmente() {
+  showToast("Sincronizando dados de sucata com o servidor...");
+  await loadStateFromServer();
+  const codeField = document.getElementById('emb-sucata-caixa-id');
+  if (codeField) {
+    if (!codeField.value) {
+      const code = await fetchCurrentCaixaSucataCodeFromServer();
+      codeField.value = code;
+    }
+    updateEmbalagemSucataBoxSummary();
+  }
+  carregarListaTodasCaixasSucata();
+  showToast("Dados da Caixa de Sucata atualizados com sucesso!");
+  playSuccessBeep();
 }
 
 async function initEmbalagemSucataView() {
