@@ -661,6 +661,7 @@ function navigate(viewId) {
   if (viewId === 'embalagem-sucata') initEmbalagemSucataView();
   if (viewId === 'embalagem-pallet-sucata') initPalletSucataView();
   if (viewId === 'embalagem-consulta-sucata') initEmbalagemConsultaSucataView();
+  if (viewId === 'expedicao') initExpedicaoView();
 
   // Fechar gaveta em telas touch/menores ao clicar
   if (window.innerWidth <= 1024) {
@@ -4954,68 +4955,526 @@ function reimprimirEtiquetaPorCaixaId(caixaId) {
 }
 
 /* ==========================================================================
-   MENU EXPEDIÇÃO
+   MENU EXPEDIÇÃO (MÚLTIPLOS PALLETS POR NOTA FISCAL)
    ========================================================================== */
 
-async function processExpedicao(e) {
-  e.preventDefault();
-  const ordem = document.getElementById('exp-ordem').value.trim().toUpperCase();
-  const destino = document.getElementById('exp-destino').value.trim();
-  const barcode = document.getElementById('exp-barcode').value.trim().toUpperCase();
+let expedicaoSession = {
+  ordem: '',
+  destino: '',
+  items: []
+};
 
-  const matchingUnits = appState.units.filter(u => 
-    u.serial === barcode || u.gpon === barcode || u.mac === barcode || (u.embalagem && u.embalagem.caixaId === barcode)
-  );
+function initExpedicaoView() {
+  atualizarResumoExpedicao();
+  renderExpedicaoItemsTable();
+}
 
-  if (matchingUnits.length === 0) {
-    alert("Nenhuma caixa ou unidade encontrada com este código!");
+async function sincronizarExpedicaoManualmente() {
+  showToast("Sincronizando dados com o servidor...");
+  await loadStateFromServer();
+  atualizarResumoExpedicao();
+  renderExpedicaoItemsTable();
+  showToast("Dados de expedição atualizados com sucesso!");
+  playSuccessBeep();
+}
+
+function limparExpedicaoSessao() {
+  if (expedicaoSession.items.length > 0) {
+    if (!confirm("Deseja realmente iniciar uma nova Nota Fiscal? Os itens não confirmados nesta sessão serão descartados da lista.")) {
+      return;
+    }
+  }
+  expedicaoSession = {
+    ordem: '',
+    destino: '',
+    items: []
+  };
+  const ordemEl = document.getElementById('exp-ordem');
+  const destinoEl = document.getElementById('exp-destino');
+  const barcodeEl = document.getElementById('exp-barcode');
+  if (ordemEl) ordemEl.value = '';
+  if (destinoEl) destinoEl.value = '';
+  if (barcodeEl) barcodeEl.value = '';
+  atualizarResumoExpedicao();
+  renderExpedicaoItemsTable();
+  showToast("Sessão de expedição reiniciada.");
+}
+
+function atualizarResumoExpedicao() {
+  const ordemInput = document.getElementById('exp-ordem');
+  const destinoInput = document.getElementById('exp-destino');
+
+  const ordem = (ordemInput ? ordemInput.value : expedicaoSession.ordem).trim().toUpperCase();
+  const destino = (destinoInput ? destinoInput.value : expedicaoSession.destino).trim().toUpperCase();
+
+  expedicaoSession.ordem = ordem;
+  expedicaoSession.destino = destino;
+
+  const statOrdem = document.getElementById('exp-stat-ordem');
+  const statDestino = document.getElementById('exp-stat-destino');
+  const statPallets = document.getElementById('exp-stat-pallets');
+  const statCaixas = document.getElementById('exp-stat-caixas');
+  const statUnidades = document.getElementById('exp-stat-unidades');
+  const badgeStatus = document.getElementById('exp-badge-status');
+  const btnConfirmar = document.getElementById('btn-confirmar-expedicao');
+
+  const palletsCount = expedicaoSession.items.filter(it => it.type === 'PALLET').length;
+  let totalCaixas = 0;
+  let totalUnidades = 0;
+
+  expedicaoSession.items.forEach(it => {
+    totalCaixas += it.caixasCount || 0;
+    totalUnidades += it.unitsCount || 0;
+  });
+
+  if (statOrdem) statOrdem.innerText = ordem || '-';
+  if (statDestino) statDestino.innerText = destino || '-';
+  if (statPallets) statPallets.innerText = `${palletsCount} Pallet(s)`;
+  if (statCaixas) statCaixas.innerText = `${totalCaixas} Caixa(s)`;
+  if (statUnidades) statUnidades.innerText = `${totalUnidades.toLocaleString('pt-BR')} Unidades`;
+
+  if (badgeStatus) {
+    if (expedicaoSession.items.length === 0) {
+      badgeStatus.className = 'badge badge-warning';
+      badgeStatus.innerText = 'AGUARDANDO ITENS';
+    } else {
+      badgeStatus.className = 'badge badge-success';
+      badgeStatus.innerText = 'PRONTO PARA EXPEDIR';
+    }
+  }
+
+  if (btnConfirmar) {
+    const hasItems = expedicaoSession.items.length > 0;
+    btnConfirmar.disabled = !hasItems || !ordem || !destino;
+    btnConfirmar.innerHTML = `<i class="fa-solid fa-paper-plane"></i> Confirmar Expedição (${palletsCount} Pallet(s) | ${totalCaixas} Cx | ${totalUnidades} Un)`;
+  }
+}
+
+function renderExpedicaoItemsTable() {
+  const tbody = document.getElementById('tbody-expedicao-items');
+  const counterEl = document.getElementById('exp-items-counter');
+  if (!tbody) return;
+
+  if (counterEl) {
+    counterEl.innerText = `${expedicaoSession.items.length} item(ns) na lista`;
+  }
+
+  if (expedicaoSession.items.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="text-muted text-center" style="padding: 24px;">
+          <i class="fa-solid fa-pallet" style="font-size: 2rem; opacity: 0.3; display: block; margin-bottom: 8px;"></i>
+          Nenhum pallet ou item adicionado a esta Nota Fiscal ainda.<br>
+          Preencha a <strong>Nota Fiscal</strong> e <strong>Destino</strong> acima e bipe o código do Pallet.
+        </td>
+      </tr>
+    `;
     return;
+  }
+
+  tbody.innerHTML = expedicaoSession.items.map((it, idx) => {
+    const badgeType = it.type === 'PALLET' ? '<span class="badge badge-purple"><i class="fa-solid fa-pallet"></i> PALLET</span>'
+      : it.type === 'CAIXA' ? '<span class="badge badge-success"><i class="fa-solid fa-box"></i> CAIXA</span>'
+      : '<span class="badge badge-info"><i class="fa-solid fa-microchip"></i> UNIDADE</span>';
+
+    return `
+      <tr>
+        <td>${badgeType}</td>
+        <td><strong style="color: #38bdf8; font-size: 1.05rem;">${it.id}</strong></td>
+        <td><strong>${it.modelo || '-'}</strong></td>
+        <td>${it.localidade || '-'}</td>
+        <td><span class="badge badge-secondary">${it.caixasCount} cx</span></td>
+        <td><strong style="color: #34d399;">${it.unitsCount} un</strong></td>
+        <td><span class="badge badge-success">OK / Pronto</span></td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-danger btn-sm" onclick="removerItemExpedicao(${idx})" title="Remover este item da Nota Fiscal">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function removerItemExpedicao(index) {
+  if (index >= 0 && index < expedicaoSession.items.length) {
+    const item = expedicaoSession.items[index];
+    expedicaoSession.items.splice(index, 1);
+    atualizarResumoExpedicao();
+    renderExpedicaoItemsTable();
+    showToast(`Item [${item.id}] removido da lista da Nota Fiscal.`);
+    playSuccessBeep();
+  }
+}
+
+async function adicionarItemExpedicao(e) {
+  if (e) e.preventDefault();
+
+  const ordemInput = document.getElementById('exp-ordem');
+  const destinoInput = document.getElementById('exp-destino');
+  const barcodeInput = document.getElementById('exp-barcode');
+
+  const ordem = (ordemInput ? ordemInput.value : '').trim().toUpperCase();
+  const destino = (destinoInput ? destinoInput.value : '').trim().toUpperCase();
+  const barcode = (barcodeInput ? barcodeInput.value : '').trim().toUpperCase();
+
+  if (!ordem) {
+    playErrorBeep();
+    alert("Por favor, preencha o Número da Nota Fiscal / Ordem de Expedição antes de bipar os itens!");
+    if (ordemInput) ordemInput.focus();
+    return;
+  }
+
+  if (!destino) {
+    playErrorBeep();
+    alert("Por favor, preencha o Destino / Cliente antes de bipar os itens!");
+    if (destinoInput) destinoInput.focus();
+    return;
+  }
+
+  if (!barcode) return;
+
+  expedicaoSession.ordem = ordem;
+  expedicaoSession.destino = destino;
+
+  // 1. Verificar se já foi adicionado nesta sessão
+  const jaAdicionado = expedicaoSession.items.some(it => it.id === barcode);
+  if (jaAdicionado) {
+    playErrorBeep();
+    alert(`BLOQUEIO:\nO código [${barcode}] já está adicionado na lista desta Nota Fiscal!`);
+    if (barcodeInput) barcodeInput.value = '';
+    return;
+  }
+
+  // 2. Tenta localizar como PALLET
+  let palletUnits = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === barcode);
+
+  // Se não achou localmente, recarrega do servidor
+  if (palletUnits.length === 0) {
+    try {
+      await loadStateFromServer();
+      palletUnits = appState.units.filter(u => u.pallet && String(u.pallet.palletId).trim().toUpperCase() === barcode);
+    } catch (err) {}
+  }
+
+  // Se ainda não achou direto na unidade, tenta pelo cadastro de caixas
+  if (palletUnits.length === 0 && appState.caixas) {
+    const matchingCaixas = appState.caixas.filter(c => c.pallet_id && String(c.pallet_id).trim().toUpperCase() === barcode);
+    if (matchingCaixas.length > 0) {
+      const caixaIds = matchingCaixas.map(c => c.id);
+      palletUnits = appState.units.filter(u => u.embalagem && caixaIds.includes(u.embalagem.caixaId));
+    }
+  }
+
+  // Se encontrou unidades vinculadas ao pallet
+  if (palletUnits.length > 0) {
+    // Validação 1: Já expedido?
+    const alreadyExpedido = palletUnits.some(u => u.status === 'EXPEDIDO' || (u.expedicao && u.expedicao.ordem));
+    if (alreadyExpedido) {
+      const firstExp = palletUnits.find(u => u.expedicao && u.expedicao.ordem);
+      const nfExistente = firstExp ? firstExp.expedicao.ordem : 'Desconhecida';
+      const dataExp = firstExp && firstExp.expedicao ? firstExp.expedicao.data : '-';
+      playErrorBeep();
+      alert(`BLOQUEIO DE DUPLICIDADE:\nO Pallet [${barcode}] já foi expedido anteriormente na Nota Fiscal [${nfExistente}] em [${dataExp}]!`);
+      if (barcodeInput) barcodeInput.value = '';
+      return;
+    }
+
+    // Obter caixas do pallet
+    let caixasInPallet = (typeof obterCaixasDoPallet === 'function') ? obterCaixasDoPallet(barcode) : [];
+    if (caixasInPallet.length === 0 && (typeof obterCaixasDoPalletSucata === 'function')) {
+      caixasInPallet = obterCaixasDoPalletSucata(barcode);
+    }
+    const distinctCaixas = [...new Set(palletUnits.map(u => u.embalagem ? u.embalagem.caixaId : null).filter(Boolean))];
+    const totalCaixasNoPallet = caixasInPallet.length > 0 ? caixasInPallet.length : distinctCaixas.length;
+
+    // Validação 2: Pallet fechado?
+    const isFechado = palletUnits.every(u => u.pallet && u.pallet.fechado) || palletsFechadosSet.has(barcode);
+    if (!isFechado) {
+      if (!confirm(`ATENÇÃO:\nO Pallet [${barcode}] ainda consta como ABERTO no sistema (com ${totalCaixasNoPallet} caixa(s)).\n\nDeseja fechar o pallet agora e prosseguir com a expedição nesta Nota Fiscal?`)) {
+        if (barcodeInput) barcodeInput.value = '';
+        return;
+      }
+      palletsFechadosSet.add(barcode);
+      palletUnits.forEach(u => {
+        if (u.pallet) u.pallet.fechado = true;
+      });
+    }
+
+    const caixaIds = caixasInPallet.length > 0 ? caixasInPallet.map(c => c.caixaId).filter(Boolean) : distinctCaixas;
+    const unitIds = palletUnits.map(u => u.id);
+    const modelosList = [...new Set(palletUnits.map(u => u.modelo).filter(Boolean))].join(', ') || '-';
+    const localidade = palletUnits[0]?.localidade || '-';
+
+    expedicaoSession.items.push({
+      type: 'PALLET',
+      id: barcode,
+      modelo: modelosList,
+      localidade: localidade,
+      caixasCount: totalCaixasNoPallet,
+      unitsCount: palletUnits.length,
+      caixaIds: caixaIds,
+      unitIds: unitIds,
+      units: palletUnits
+    });
+
+    if (barcodeInput) {
+      barcodeInput.value = '';
+      barcodeInput.focus();
+    }
+    playSuccessBeep();
+    atualizarResumoExpedicao();
+    renderExpedicaoItemsTable();
+    showToast(`Pallet [${barcode}] adicionado à NF com sucesso! (${palletUnits.length} un)`);
+    return;
+  }
+
+  // 3. Tenta localizar como CAIXA
+  let boxUnits = appState.units.filter(u => u.embalagem && String(u.embalagem.caixaId).trim().toUpperCase() === barcode);
+  if (boxUnits.length > 0) {
+    // Se a caixa estiver dentro de um pallet
+    const jaPaletizada = boxUnits.some(u => u.pallet && u.pallet.palletId);
+    if (jaPaletizada) {
+      const palletPai = boxUnits.find(u => u.pallet && u.pallet.palletId).pallet.palletId;
+      playErrorBeep();
+      alert(`AVISO:\nA caixa [${barcode}] pertence ao Pallet [${palletPai}].\n\nPor favor, bipe diretamente o código do Pallet [${palletPai}] para adicionar o pallet completo à Nota Fiscal.`);
+      if (barcodeInput) barcodeInput.value = '';
+      return;
+    }
+
+    // Caixa avulsa
+    const alreadyExpedido = boxUnits.some(u => u.status === 'EXPEDIDO' || (u.expedicao && u.expedicao.ordem));
+    if (alreadyExpedido) {
+      playErrorBeep();
+      alert(`BLOQUEIO DE DUPLICIDADE:\nA caixa [${barcode}] já foi expedida anteriormente!`);
+      if (barcodeInput) barcodeInput.value = '';
+      return;
+    }
+
+    const modelosList = [...new Set(boxUnits.map(u => u.modelo).filter(Boolean))].join(', ') || '-';
+    const localidade = boxUnits[0]?.localidade || '-';
+
+    expedicaoSession.items.push({
+      type: 'CAIXA',
+      id: barcode,
+      modelo: modelosList,
+      localidade: localidade,
+      caixasCount: 1,
+      unitsCount: boxUnits.length,
+      caixaIds: [barcode],
+      unitIds: boxUnits.map(u => u.id),
+      units: boxUnits
+    });
+
+    if (barcodeInput) {
+      barcodeInput.value = '';
+      barcodeInput.focus();
+    }
+    playSuccessBeep();
+    atualizarResumoExpedicao();
+    renderExpedicaoItemsTable();
+    showToast(`Caixa avulsa [${barcode}] adicionada à NF! (${boxUnits.length} un)`);
+    return;
+  }
+
+  // 4. Tenta localizar como UNIDADE individual (Serial/GPON/MAC)
+  const singleUnit = appState.units.find(u => u.serial === barcode || u.gpon === barcode || u.mac === barcode);
+  if (singleUnit) {
+    if (singleUnit.pallet && singleUnit.pallet.palletId) {
+      playErrorBeep();
+      alert(`AVISO:\nEsta unidade pertence ao Pallet [${singleUnit.pallet.palletId}].\nBipe o código do Pallet para expedir.`);
+      if (barcodeInput) barcodeInput.value = '';
+      return;
+    }
+    if (singleUnit.embalagem && singleUnit.embalagem.caixaId) {
+      playErrorBeep();
+      alert(`AVISO:\nEsta unidade pertence à Caixa [${singleUnit.embalagem.caixaId}].\nBipe a Caixa para expedir.`);
+      if (barcodeInput) barcodeInput.value = '';
+      return;
+    }
+
+    if (singleUnit.status === 'EXPEDIDO' || (singleUnit.expedicao && singleUnit.expedicao.ordem)) {
+      playErrorBeep();
+      alert(`BLOQUEIO:\nA unidade [${barcode}] já foi expedida anteriormente!`);
+      if (barcodeInput) barcodeInput.value = '';
+      return;
+    }
+
+    expedicaoSession.items.push({
+      type: 'UNIDADE',
+      id: singleUnit.serial,
+      modelo: singleUnit.modelo || '-',
+      localidade: singleUnit.localidade || '-',
+      caixasCount: 0,
+      unitsCount: 1,
+      caixaIds: [],
+      unitIds: [singleUnit.id],
+      units: [singleUnit]
+    });
+
+    if (barcodeInput) {
+      barcodeInput.value = '';
+      barcodeInput.focus();
+    }
+    playSuccessBeep();
+    atualizarResumoExpedicao();
+    renderExpedicaoItemsTable();
+    showToast(`Unidade avulsa [${singleUnit.serial}] adicionada à NF!`);
+    return;
+  }
+
+  // Não encontrou nada
+  playErrorBeep();
+  alert(`BLOQUEIO:\nNenhum Pallet, Caixa ou Unidade encontrada para o código: "${barcode}".`);
+  if (barcodeInput) barcodeInput.value = '';
+}
+
+async function confirmarExpedicaoNotaFiscal() {
+  const ordem = (expedicaoSession.ordem || '').trim().toUpperCase();
+  const destino = (expedicaoSession.destino || '').trim().toUpperCase();
+
+  if (!ordem || !destino) {
+    alert("Informe o Número da Nota Fiscal / Ordem e o Destino!");
+    return;
+  }
+
+  if (expedicaoSession.items.length === 0) {
+    alert("Nenhum pallet ou item adicionado à Nota Fiscal para expedir!");
+    return;
+  }
+
+  const palletsCount = expedicaoSession.items.filter(it => it.type === 'PALLET').length;
+  let totalCaixas = 0;
+  let totalUnidades = 0;
+  const allUnits = [];
+  const allCaixaIds = [];
+  const allPalletIds = [];
+
+  expedicaoSession.items.forEach(it => {
+    totalCaixas += it.caixasCount || 0;
+    totalUnidades += it.unitsCount || 0;
+    if (it.units) allUnits.push(...it.units);
+    if (it.caixaIds) allCaixaIds.push(...it.caixaIds);
+    if (it.type === 'PALLET') allPalletIds.push(it.id);
+  });
+
+  const confirmMsg = `CONFIRMAÇÃO DE EXPEDIÇÃO:\n\n` +
+    `• Nota Fiscal / Ordem: ${ordem}\n` +
+    `• Destino / Cliente: ${destino}\n` +
+    `• Total de Pallets: ${palletsCount}\n` +
+    `• Total de Caixas: ${totalCaixas}\n` +
+    `• Total de Unidades: ${totalUnidades.toLocaleString('pt-BR')}\n\n` +
+    `Deseja realmente confirmar a expedição de todos estes itens nesta Nota Fiscal?`;
+
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  const btnConfirmar = document.getElementById('btn-confirmar-expedicao');
+  if (btnConfirmar) {
+    btnConfirmar.disabled = true;
+    btnConfirmar.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processando expedição no servidor...`;
   }
 
   const now = new Date();
   const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+  const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
+  const unitUpdates = [];
+
+  for (const u of allUnits) {
+    const expedicaoData = {
+      ordem: ordem,
+      destino: destino,
+      data: dateStr,
+      operador: userAtual
+    };
+
+    registrarEventoHistorico(u, {
+      tipo: 'EXPEDICAO',
+      titulo: `Expedido na NF [${ordem}]`,
+      descricao: `Despachado para [${destino}] na Nota Fiscal [${ordem}] pelo operador [${userAtual}]`,
+      operador: userAtual,
+      data: dateStr,
+      statusAnterior: u.status,
+      statusNovo: 'EXPEDIDO',
+      extra: expedicaoData
+    });
+
+    u.status = 'EXPEDIDO';
+    u.expedicao = expedicaoData;
+
+    unitUpdates.push({
+      id: u.id,
+      expedicao: expedicaoData,
+      historico: u.historico
+    });
+  }
 
   try {
-    await Promise.all(matchingUnits.map(u => {
-      const expedicaoData = {
-        ordem,
-        destino,
-        data: dateStr,
-        operador: appState.currentUser.login
-      };
+    // 1. Tenta envio em lote atômico no servidor
+    const response = await fetch('/api/units/batch-expedicao', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        unitUpdates: unitUpdates,
+        palletIds: allPalletIds,
+        caixaIds: allCaixaIds
+      })
+    });
 
-      registrarEventoHistorico(u, {
-        tipo: 'EXPEDICAO',
-        titulo: `Expedido na Ordem [${ordem}]`,
-        descricao: `Unidade despachada para o destino [${destino}] através da ordem [${ordem}]`,
-        operador: appState.currentUser.login,
-        data: dateStr,
-        statusAnterior: u.status,
-        statusNovo: 'EXPEDIDO',
-        extra: expedicaoData
-      });
+    if (!response.ok) {
+      console.warn("Falha no batch-expedicao, executando fallback em chunks...");
+      const chunkSize = 25;
+      for (let i = 0; i < allUnits.length; i += chunkSize) {
+        const chunk = allUnits.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(u =>
+          fetch(`/api/units/${u.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              status: 'EXPEDIDO',
+              expedicao: u.expedicao,
+              historico: u.historico
+            })
+          })
+        ));
+      }
+    }
 
-      return fetch(`/api/units/${u.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          status: 'EXPEDIDO',
-          expedicao: expedicaoData,
-          historico: u.historico
-        })
-      }).then(res => {
-        if (!res.ok) throw new Error();
-        u.expedicao = expedicaoData;
-        u.status = 'EXPEDIDO';
-      });
-    }));
+    saveStateToStorage();
+    playSuccessBeep();
+    alert(`SUCESSO!\n\nExpedição concluída com sucesso para a Nota Fiscal [${ordem}]!\n\n• Pallets Expedidos: ${palletsCount}\n• Caixas Expedidas: ${totalCaixas}\n• Total de Unidades: ${totalUnidades.toLocaleString('pt-BR')}`);
 
-    document.getElementById('exp-barcode').value = '';
-    alert(`Expedição confirmada para ${matchingUnits.length} unidade(s)!`);
+    // Limpa a sessão para a próxima NF
+    expedicaoSession = { ordem: '', destino: '', items: [] };
+    const ordemInput = document.getElementById('exp-ordem');
+    const destinoInput = document.getElementById('exp-destino');
+    const barcodeInput = document.getElementById('exp-barcode');
+    if (ordemInput) ordemInput.value = '';
+    if (destinoInput) destinoInput.value = '';
+    if (barcodeInput) barcodeInput.value = '';
+
+    atualizarResumoExpedicao();
+    renderExpedicaoItemsTable();
+
+    // Sincroniza estado com o servidor em segundo plano
+    loadStateFromServer().catch(() => {});
+
   } catch (err) {
-    console.error(err);
-    alert("Erro ao registrar expedição no servidor!");
+    console.error("Erro ao confirmar expedição:", err);
+    playErrorBeep();
+    alert("Ocorreu um erro ao salvar a expedição no servidor. Por favor, tente novamente.");
+    if (btnConfirmar) {
+      btnConfirmar.disabled = false;
+      atualizarResumoExpedicao();
+    }
   }
+}
+
+// Compatibilidade com chamadas legadas
+function processExpedicao(e) {
+  return adicionarItemExpedicao(e);
 }
 
 /* ==========================================================================
@@ -5382,8 +5841,10 @@ function renderRelatorioTable() {
       theadHtml = `
         <tr>
           <th>Data/Hora</th>
-          <th>Ordem Expedição</th>
+          <th>Nota / Ordem</th>
           <th>Destino</th>
+          <th>Pallet</th>
+          <th>Caixa</th>
           <th>Serial</th>
           <th>Fabricante / Modelo</th>
           <th>Operador</th>
@@ -5391,11 +5852,15 @@ function renderRelatorioTable() {
       `;
       rowsHtml = filteredUnits.map(u => {
         if (!u.expedicao) return '';
+        const palletCode = (u.pallet && u.pallet.palletId) ? u.pallet.palletId : '-';
+        const caixaCode = (u.embalagem && u.embalagem.caixaId) ? u.embalagem.caixaId : '-';
         return `
           <tr>
             <td>${u.expedicao.data || '-'}</td>
             <td><strong>${u.expedicao.ordem || '-'}</strong></td>
             <td>${u.expedicao.destino || '-'}</td>
+            <td><strong style="color: #38bdf8;">${palletCode}</strong></td>
+            <td><code>${caixaCode}</code></td>
             <td><code>${u.serial || '-'}</code></td>
             <td>${u.fabricante || '-'} ${u.modelo || '-'}</td>
             <td>${u.expedicao.operador || '-'}</td>
@@ -5508,8 +5973,10 @@ function exportCurrentReportToExcel() {
         if (!u.expedicao) return;
         dataRows.push({
           'Data Expedição': u.expedicao.data || '-',
-          'Ordem Expedição': u.expedicao.ordem || '-',
+          'Nota / Ordem Expedição': u.expedicao.ordem || '-',
           'Destino': u.expedicao.destino || '-',
+          'Pallet': (u.pallet && u.pallet.palletId) ? u.pallet.palletId : '-',
+          'Caixa': (u.embalagem && u.embalagem.caixaId) ? u.embalagem.caixaId : '-',
           'Serial': u.serial || '-',
           'Fabricante / Modelo': `${u.fabricante || ''} ${u.modelo || ''}`.trim() || '-',
           'Operador': u.expedicao.operador || '-'

@@ -10,7 +10,8 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(path.join(__dirname)));
 
 let pool;
@@ -584,6 +585,50 @@ app.put('/api/units/:id', async (req, res) => {
     res.json({ success: true, message: 'Unidade salva com sucesso!' });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// BATCH EXPEDICAO ENDPOINT (Expedição em lote de múltiplos pallets/caixas/unidades)
+app.post('/api/units/batch-expedicao', async (req, res) => {
+  const { unitUpdates, palletIds, caixaIds } = req.body;
+  if (!Array.isArray(unitUpdates) || unitUpdates.length === 0) {
+    return res.status(400).json({ error: 'Nenhuma unidade informada para expedição.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Executa a atualização das unidades em lote usando jsonb_to_recordset
+    const query = `
+      UPDATE units AS u
+      SET status = 'EXPEDIDO',
+          expedicao = v.expedicao::jsonb,
+          historico = v.historico::jsonb
+      FROM (
+        SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(id text, expedicao jsonb, historico jsonb)
+      ) AS v
+      WHERE u.id = v.id
+    `;
+    await client.query(query, [JSON.stringify(unitUpdates)]);
+
+    // Se houver palletIds, atualiza status das caixas no banco
+    if (Array.isArray(palletIds) && palletIds.length > 0) {
+      await client.query(`UPDATE caixas SET status = 'EXPEDIDA' WHERE pallet_id = ANY($1::text[])`, [palletIds]);
+    }
+    // Se houver caixaIds avulsas, atualiza no banco
+    if (Array.isArray(caixaIds) && caixaIds.length > 0) {
+      await client.query(`UPDATE caixas SET status = 'EXPEDIDA' WHERE id = ANY($1::text[])`, [caixaIds]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ success: true, count: unitUpdates.length });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[Server] Erro no batch-expedicao:', err);
+    res.status(500).json({ error: err.message || 'Erro ao persistir expedição em lote.' });
+  } finally {
+    client.release();
   }
 });
 

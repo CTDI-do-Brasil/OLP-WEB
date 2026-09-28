@@ -2186,32 +2186,114 @@
         <!-- 9. MENU EXPEDIÇÃO VIEW -->
         <section id="view-expedicao" class="page-view">
           <div class="card glass-card">
-            <div class="card-header">
-              <h3><i class="fa-solid fa-truck-fast"></i> Expedição de Unidades / Caixas</h3>
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-truck-fast"></i> Módulo de Expedição (Romaneio / Nota Fiscal)</h3>
+              <div class="header-actions">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="sincronizarExpedicaoManualmente()" title="Atualizar dados do servidor">
+                  <i class="fa-solid fa-rotate"></i> Atualizar
+                </button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="limparExpedicaoSessao()" title="Iniciar nova Nota Fiscal limpa">
+                  <i class="fa-solid fa-file-circle-plus"></i> Nova NF
+                </button>
+              </div>
             </div>
             <div class="card-body">
-              <form id="form-expedicao" onsubmit="processExpedicao(event)">
-                <div class="grid-2col">
-                  <div class="form-group">
-                    <label for="exp-ordem"><i class="fa-solid fa-file-contract"></i> Ordem de Expedição / Nota *</label>
-                    <input type="text" id="exp-ordem" placeholder="Ex: ORD-8842-EXP" required style="text-transform: uppercase;">
-                  </div>
+              <div class="grid-2col">
+                <div>
+                  <form id="form-expedicao-scan" onsubmit="adicionarItemExpedicao(event)">
+                    <div class="grid-2col" style="gap: 12px;">
+                      <div class="form-group">
+                        <label for="exp-ordem"><i class="fa-solid fa-file-contract"></i> Número da Nota Fiscal / Ordem *</label>
+                        <input type="text" id="exp-ordem" placeholder="Ex: NF 123456 ou ORD-8842" required style="text-transform: uppercase;" oninput="atualizarResumoExpedicao()">
+                      </div>
+                      <div class="form-group">
+                        <label for="exp-destino"><i class="fa-solid fa-location-crosshairs"></i> Destino / Cliente *</label>
+                        <input type="text" id="exp-destino" placeholder="Ex: CENTRO DE DISTRIBUIÇÃO SP" required oninput="atualizarResumoExpedicao()">
+                      </div>
+                    </div>
 
-                  <div class="form-group">
-                    <label for="exp-destino"><i class="fa-solid fa-location-crosshairs"></i> Destino / Cliente *</label>
-                    <input type="text" id="exp-destino" placeholder="Ex: CENTRO DE DISTRIBUIÇÃO SP" required>
-                  </div>
+                    <div class="form-group margin-top">
+                      <label for="exp-barcode"><i class="fa-solid fa-barcode"></i> Bipar Código do Pallet (ou Caixa / Serial) *</label>
+                      <div class="flex-row">
+                        <input type="text" id="exp-barcode" placeholder="Bipe o PALLET (Ex: P000000001, PS...), Caixa ou Serial..." required style="text-transform: uppercase; font-weight: 700; color: #38bdf8;">
+                        <button type="submit" class="btn btn-purple" style="margin-top: 15px; white-space: nowrap;">
+                          <i class="fa-solid fa-plus"></i> Adicionar
+                        </button>
+                      </div>
+                      <small class="text-muted" style="display: block; margin-top: 6px; font-size: 0.8rem;">
+                        <i class="fa-solid fa-info-circle" style="color: #60a5fa;"></i> <strong>Multi-Pallet:</strong> Bipe quantos pallets desejar para esta mesma Nota Fiscal antes de confirmar a expedição.
+                      </small>
+                    </div>
+                  </form>
                 </div>
 
-                <div class="form-group">
-                  <label for="exp-barcode"><i class="fa-solid fa-barcode"></i> Bipar Serial da Unidade ou Código da Caixa *</label>
-                  <input type="text" id="exp-barcode" placeholder="Bipe o SERIAL ou Código da CAIXA..." required>
+                <div class="box-status-card">
+                  <div class="flex-between">
+                    <h4><i class="fa-solid fa-receipt"></i> Resumo da Nota Fiscal</h4>
+                    <span id="exp-badge-status" class="badge badge-warning">AGUARDANDO ITENS</span>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Nota / Ordem:</span>
+                    <strong id="exp-stat-ordem" style="color: #38bdf8;">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Destino / Cliente:</span>
+                    <strong id="exp-stat-destino">-</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Pallets:</span>
+                    <strong id="exp-stat-pallets" style="color: #34d399;">0 Pallets</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Caixas:</span>
+                    <strong id="exp-stat-caixas">0 Caixas</strong>
+                  </div>
+                  <div class="box-stat-item">
+                    <span>Total de Unidades:</span>
+                    <strong id="exp-stat-unidades" style="color: #a855f7;">0 Unidades</strong>
+                  </div>
+                </div>
+              </div>
+
+              <!-- LISTA DE PALLETS E VOLUMES NA NF -->
+              <div class="margin-top" style="border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 15px;">
+                <div class="flex-between" style="margin-bottom: 10px;">
+                  <h4><i class="fa-solid fa-boxes-stacked"></i> Pallets & Itens Adicionados a esta Nota Fiscal</h4>
+                  <span class="text-muted" id="exp-items-counter" style="font-size: 0.85rem;">0 item(ns) na lista</span>
                 </div>
 
-                <button type="submit" class="btn btn-purple btn-block">
-                  <i class="fa-solid fa-paper-plane"></i> Confirmar Expedição
-                </button>
-              </form>
+                <div class="table-container" style="max-height: 280px; overflow-y: auto;">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th>Tipo</th>
+                        <th>Código / Pallet</th>
+                        <th>Modelo(s)</th>
+                        <th>Regional</th>
+                        <th>Qtd Caixas</th>
+                        <th>Qtd Unidades</th>
+                        <th>Status</th>
+                        <th style="text-align: center;">Ação</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tbody-expedicao-items">
+                      <tr>
+                        <td colspan="8" class="text-muted text-center" style="padding: 24px;">
+                          <i class="fa-solid fa-pallet" style="font-size: 2rem; opacity: 0.3; display: block; margin-bottom: 8px;"></i>
+                          Nenhum pallet ou item adicionado a esta Nota Fiscal ainda.<br>
+                          Preencha a <strong>Nota Fiscal</strong> e <strong>Destino</strong> acima e bipe o código do Pallet.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div style="margin-top: 20px;">
+                  <button type="button" id="btn-confirmar-expedicao" class="btn btn-purple btn-block" style="font-size: 1.1rem; padding: 14px; font-weight: 700;" onclick="confirmarExpedicaoNotaFiscal()" disabled>
+                    <i class="fa-solid fa-paper-plane"></i> Confirmar Expedição (0 Pallets / 0 Unidades)
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
