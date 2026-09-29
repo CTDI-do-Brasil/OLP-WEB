@@ -86,14 +86,23 @@ function checkDatabaseDuplicates(item, existingDatabase) {
     const recGpon = (rec.gpon || '').trim().toUpperCase();
     const recMac = (rec.mac || '').trim().toUpperCase();
 
-    if (serialClean && (serialClean === recSerial || serialClean === recGpon || serialClean === recMac)) {
-      return { isDuplicate: true, conflictField: 'SERIAL', conflictVal: serialClean, conflictRecord: rec };
-    }
-    if (gponClean && (gponClean === recSerial || gponClean === recGpon || gponClean === recMac)) {
-      return { isDuplicate: true, conflictField: 'GPON', conflictVal: gponClean, conflictRecord: rec };
-    }
-    if (macClean && (macClean === recSerial || macClean === recGpon || macClean === recMac)) {
-      return { isDuplicate: true, conflictField: 'MAC', conflictVal: macClean, conflictRecord: rec };
+    const isMatch = (serialClean && (serialClean === recSerial || serialClean === recGpon || serialClean === recMac)) ||
+                    (gponClean && (gponClean === recSerial || gponClean === recGpon || gponClean === recMac)) ||
+                    (macClean && (macClean === recSerial || macClean === recGpon || macClean === recMac));
+
+    if (isMatch) {
+      const conflictField = (serialClean && (serialClean === recSerial || serialClean === recGpon || serialClean === recMac)) ? 'SERIAL' :
+                            (gponClean && (gponClean === recSerial || gponClean === recGpon || gponClean === recMac)) ? 'GPON' : 'MAC';
+      const conflictVal = conflictField === 'SERIAL' ? serialClean : conflictField === 'GPON' ? gponClean : macClean;
+      const isExpedido = rec.status === 'EXPEDIDO' || (rec.expedicao && rec.expedicao.ordem);
+
+      return {
+        isDuplicate: true,
+        isExpedido: !!isExpedido,
+        conflictField: conflictField,
+        conflictVal: conflictVal,
+        conflictRecord: rec
+      };
     }
   }
 

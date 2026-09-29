@@ -2049,10 +2049,33 @@ async function processRecebimentoSubmit(e) {
 
     const dbDup = checkDatabaseDuplicates(dbItemToCheck, appState.units);
     if (dbDup.isDuplicate) {
+      if (dbDup.isExpedido) {
+        // UNIDADE JÁ EXPEDIDA ANTERIORMENTE - REENTRADA / NOVO CICLO
+        const nfExp = (dbDup.conflictRecord.expedicao && dbDup.conflictRecord.expedicao.ordem) ? dbDup.conflictRecord.expedicao.ordem : 'Desconhecida';
+        const dataExp = (dbDup.conflictRecord.expedicao && dbDup.conflictRecord.expedicao.data) ? dbDup.conflictRecord.expedicao.data : '-';
+        const destExp = (dbDup.conflictRecord.expedicao && dbDup.conflictRecord.expedicao.destino) ? dbDup.conflictRecord.expedicao.destino : '-';
+        const cicloNum = (dbDup.conflictRecord.ciclos_anteriores ? dbDup.conflictRecord.ciclos_anteriores.length : 0) + 1;
+
+        const confirmMsg = `REENTRADA DE EQUIPAMENTO:\n\n` +
+          `A unidade [${dbDup.conflictVal}] já foi expedida anteriormente no sistema!\n\n` +
+          `• Nota Fiscal / Ordem Anterior: ${nfExp}\n` +
+          `• Destino Anterior: ${destExp}\n` +
+          `• Data da Expedição Anterior: ${dataExp}\n\n` +
+          `Deseja INICIAR UM NOVO CICLO (Ciclo ${cicloNum + 1}) mantendo todo o histórico anterior gravado?`;
+
+        if (!confirm(confirmMsg)) {
+          isRecebimentoSubmitting = false;
+          return;
+        }
+
+        await processarReentradaUnidade(dbDup.conflictRecord, selectedModel, localidade, dbItemToCheck);
+        return;
+      }
+
       playErrorBeep();
       showAlertModal(
         "BLOQUEIO: UNIDADE JÁ RECEBIDA!",
-        `A unidade com ${dbDup.conflictField} "${dbDup.conflictVal}" JÁ FOI RECEBIDA no sistema!`,
+        `A unidade com ${dbDup.conflictField} "${dbDup.conflictVal}" JÁ FOI RECEBIDA e está em andamento!`,
         `<b>Data do Recebimento Anterior:</b> ${dbDup.conflictRecord.dataRecebimento}<br>
          <b>Recebido por:</b> ${dbDup.conflictRecord.operador}<br>
          <b>Status Atual:</b> ${dbDup.conflictRecord.status}`
@@ -2125,6 +2148,54 @@ async function processRecebimentoSubmit(e) {
   } catch (err) {
     console.error(err);
     alert("Erro ao salvar recebimento no servidor: " + err.message);
+  } finally {
+    isRecebimentoSubmitting = false;
+  }
+}
+
+async function processarReentradaUnidade(existingUnit, selectedModel, localidade, dbItemToCheck) {
+  try {
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10) + ' ' + now.toTimeString().slice(0, 8);
+    const userAtual = appState.currentUser ? appState.currentUser.login : 'OPERADOR';
+
+    const res = await fetch('/api/units/reentrada', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: existingUnit.id,
+        fabricante: selectedModel.fabricante,
+        modelo: selectedModel.nome,
+        localidade: localidade,
+        operador: userAtual,
+        dataRecebimento: dateStr,
+        dbItemToCheck: dbItemToCheck
+      })
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Erro de resposta do servidor na reentrada");
+    }
+
+    const data = await res.json();
+    const updatedUnit = data.unit;
+
+    // Atualiza o objeto da unidade em appState.units
+    Object.assign(existingUnit, updatedUnit);
+
+    // Sucesso!
+    playSuccessBeep();
+    appState.currentRecebimentoSession.unshift(existingUnit);
+    renderRecebimentoSessaoTable();
+    clearRecebimentoFields();
+
+    const cicloAtual = (existingUnit.ciclos_anteriores ? existingUnit.ciclos_anteriores.length : 0) + 1;
+    showToast(`Reentrada da unidade ${existingUnit.serial} (Ciclo ${cicloAtual}) registrada com sucesso!`);
+  } catch (err) {
+    console.error("Erro ao processar reentrada:", err);
+    playErrorBeep();
+    alert("Erro ao processar reentrada no servidor: " + err.message);
   } finally {
     isRecebimentoSubmitting = false;
   }
@@ -5558,12 +5629,19 @@ function openUnitTimelineModal(unitId) {
         return { itemClass: 'danger', badge: '<span class="badge badge-danger"><i class="fa-solid fa-trash-can"></i> CAIXA EXCLUÍDA / CANCELADA</span>' };
       case 'EXPEDICAO':
         return { itemClass: 'purple', badge: '<span class="badge" style="background: #8b5cf6; color: #fff;"><i class="fa-solid fa-truck-fast"></i> EXPEDIÇÃO</span>' };
+      case 'REENTRADA':
+        return { itemClass: 'info', badge: '<span class="badge" style="background: #0284c7; color: #fff;"><i class="fa-solid fa-rotate-left"></i> REENTRADA / NOVO CICLO</span>' };
       case 'SUCATA':
         return { itemClass: 'danger', badge: '<span class="badge badge-danger"><i class="fa-solid fa-ban"></i> SUCATEADO</span>' };
       default:
         return { itemClass: 'info', badge: `<span class="badge badge-primary">${ev.titulo || ev.tipo}</span>` };
     }
   };
+
+  const totalCiclos = (u.ciclos_anteriores ? u.ciclos_anteriores.length : 0) + 1;
+  const cicloBadge = totalCiclos > 1 
+    ? `<span class="badge badge-purple" style="font-weight: 700;"><i class="fa-solid fa-arrows-spin"></i> ${totalCiclos}º Ciclo (Reentrada)</span>` 
+    : '<span class="badge badge-secondary">1º Ciclo</span>';
 
   const modalBody = document.getElementById('unit-modal-body');
   modalBody.innerHTML = `
@@ -5573,7 +5651,9 @@ function openUnitTimelineModal(unitId) {
       <div><strong>GPON / MAC:</strong> <code>${u.gpon || u.mac || '-'}</code></div>
       <div><strong>Localidade Atual:</strong> <span>${u.localidade || '-'}</span></div>
       <div><strong>Status Atual:</strong> <span class="badge ${getStatusBadgeClass(u.status)}">${u.status}</span></div>
-      <div><strong>Caixa Atual:</strong> <span>${u.embalagem ? `<strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${u.embalagem.caixaId}</strong>` : '<span class="text-muted">Nenhuma</span>'}</span></div>
+      <div><strong>Ciclo de Atendimento:</strong> <span>${cicloBadge}</span></div>
+      <div><strong>Caixa Atual:</strong> <span>${u.embalagem ? `<strong style="color: #60a5fa;"><i class="fa-solid fa-box"></i> ${u.embalagem.caixaId}</strong>` : '<span class="text-muted">Nenhuma (Aguardando)</span>'}</span></div>
+      <div><strong>Pallet Atual:</strong> <span>${(u.pallet && u.pallet.palletId) ? `<strong style="color: #38bdf8;"><i class="fa-solid fa-pallet"></i> ${u.pallet.palletId}</strong>` : '<span class="text-muted">Nenhum</span>'}</span></div>
     </div>
 
     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 5px;">
@@ -5583,7 +5663,16 @@ function openUnitTimelineModal(unitId) {
     <div class="timeline">
       ${historico.map(ev => {
         const styleInfo = getEventBadgeAndClass(ev);
+        const isReentrada = ev.tipo === 'REENTRADA';
+        const dividerHtml = isReentrada ? `
+          <div style="margin: 15px 0 10px 0; padding: 10px 14px; background: rgba(2, 132, 199, 0.15); border-left: 4px solid #38bdf8; border-radius: 6px;">
+            <div style="font-weight: 700; color: #38bdf8; font-size: 0.95rem;"><i class="fa-solid fa-arrows-spin"></i> Início de Novo Ciclo de Atendimento (Reentrada)</div>
+            <div style="font-size: 0.8rem; color: #94a3b8; margin-top: 2px;">Eventos anteriores a este registro pertencem ao histórico do ciclo já expedido.</div>
+          </div>
+        ` : '';
+
         return `
+          ${dividerHtml}
           <div class="timeline-item ${styleInfo.itemClass}">
             <div class="timeline-dot"></div>
             <div class="timeline-content">

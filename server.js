@@ -69,6 +69,7 @@ async function initDbConnection() {
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS reparo_eletronico JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS pallet JSONB');
     await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS historico JSONB DEFAULT \'[]\'::jsonb');
+    await pool.query('ALTER TABLE units ADD COLUMN IF NOT EXISTS ciclos_anteriores JSONB DEFAULT \'[]\'::jsonb');
     await pool.query('ALTER TABLE printers ADD COLUMN IF NOT EXISTS dpi INTEGER DEFAULT 300');
     
     // Ensure caixas table exists with all required fields
@@ -375,7 +376,8 @@ app.get('/api/units', async (req, res) => {
       expedicao: row.expedicao,
       sucata: row.sucata,
       reparo_eletronico: row.reparo_eletronico,
-      historico: row.historico || []
+      historico: row.historico || [],
+      ciclos_anteriores: row.ciclos_anteriores || []
     })));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -511,6 +513,10 @@ app.put('/api/units/:id', async (req, res) => {
       values.push(body.historico ? JSON.stringify(body.historico) : null);
       fields.push(`historico = $${values.length}`);
     }
+    if (Object.prototype.hasOwnProperty.call(body, 'ciclos_anteriores')) {
+      values.push(body.ciclos_anteriores ? JSON.stringify(body.ciclos_anteriores) : JSON.stringify([]));
+      fields.push(`ciclos_anteriores = $${values.length}`);
+    }
 
     if (fields.length === 0) {
       return res.json({ success: true, message: 'Nenhum campo para atualizar.' });
@@ -629,6 +635,125 @@ app.post('/api/units/batch-expedicao', async (req, res) => {
     res.status(500).json({ error: err.message || 'Erro ao persistir expedição em lote.' });
   } finally {
     client.release();
+  }
+});
+
+// REENTRADA DE UNIDADE (Novo ciclo de atendimento com preservação total do histórico anterior)
+app.post('/api/units/reentrada', async (req, res) => {
+  const { id, fabricante, modelo, localidade, operador, dataRecebimento } = req.body;
+  try {
+    const existing = await pool.query('SELECT * FROM units WHERE id = $1', [id]);
+    if (existing.rowCount === 0) {
+      return res.status(404).json({ error: 'Unidade não encontrada para reentrada.' });
+    }
+    const unitRow = existing.rows[0];
+
+    // Validação de segurança: apenas unidades EXPEDIDAS podem ter reentrada
+    if (unitRow.status !== 'EXPEDIDO' && (!unitRow.expedicao || !unitRow.expedicao.ordem)) {
+      return res.status(400).json({ error: 'Apenas unidades já expedidas podem ter novo ciclo de atendimento.' });
+    }
+
+    const pastCiclos = Array.isArray(unitRow.ciclos_anteriores) ? unitRow.ciclos_anteriores : [];
+    const cicloNumero = pastCiclos.length + 1;
+
+    // Snapshot completo do ciclo anterior (dados de caixa, pallet, testes e expedição)
+    const cicloSnapshot = {
+      ciclo: cicloNumero,
+      modelo: unitRow.modelo,
+      fabricante: unitRow.fabricante,
+      localidade: unitRow.localidade,
+      operadorRecebimento: unitRow.operador,
+      dataRecebimento: unitRow.data_recebimento,
+      cosmetico: unitRow.cosmetico,
+      funcional: unitRow.funcional,
+      reparo_eletronico: unitRow.reparo_eletronico,
+      embalagem: unitRow.embalagem,
+      pallet: unitRow.pallet,
+      expedicao: unitRow.expedicao,
+      statusFinal: unitRow.status
+    };
+    pastCiclos.push(cicloSnapshot);
+
+    const pastHistorico = Array.isArray(unitRow.historico) ? unitRow.historico : [];
+    const nfAnterior = (unitRow.expedicao && unitRow.expedicao.ordem) ? unitRow.expedicao.ordem : '-';
+
+    // Novo evento de reentrada gravado no histórico (mantendo todos os anteriores intactos)
+    const novoEvento = {
+      id: 'HIST_' + Date.now() + '_reentrada',
+      tipo: 'REENTRADA',
+      titulo: `Novo Ciclo (Ciclo ${cicloNumero + 1}) - Reentrada`,
+      descricao: `Equipamento recebido para o Ciclo ${cicloNumero + 1} na localidade [${localidade}] por [${operador}]. Histórico anterior do Ciclo ${cicloNumero} mantido (Expedido na NF [${nfAnterior}]).`,
+      operador: operador,
+      data: dataRecebimento,
+      statusAnterior: 'EXPEDIDO',
+      statusNovo: 'RECEBIDO',
+      extra: {
+        ciclo: cicloNumero + 1,
+        cicloAnterior: cicloSnapshot
+      }
+    };
+    pastHistorico.push(novoEvento);
+
+    const updateSql = `
+      UPDATE units SET
+        fabricante = $1,
+        modelo = $2,
+        localidade = $3,
+        operador = $4,
+        data_recebimento = $5,
+        status = 'RECEBIDO',
+        cosmetico = NULL,
+        funcional = NULL,
+        embalagem = NULL,
+        pallet = NULL,
+        expedicao = NULL,
+        sucata = NULL,
+        reparo_eletronico = NULL,
+        historico = $6,
+        ciclos_anteriores = $7
+      WHERE id = $8
+      RETURNING *
+    `;
+
+    const updated = await pool.query(updateSql, [
+      fabricante || unitRow.fabricante,
+      modelo || unitRow.modelo,
+      localidade || unitRow.localidade,
+      operador,
+      dataRecebimento,
+      JSON.stringify(pastHistorico),
+      JSON.stringify(pastCiclos),
+      id
+    ]);
+
+    res.json({
+      success: true,
+      message: `Unidade recebida com sucesso para o Ciclo ${cicloNumero + 1}!`,
+      unit: {
+        id: updated.rows[0].id,
+        fabricante: updated.rows[0].fabricante,
+        modelo: updated.rows[0].modelo,
+        serial: updated.rows[0].serial,
+        gpon: updated.rows[0].gpon || '',
+        mac: updated.rows[0].mac || '',
+        localidade: updated.rows[0].localidade,
+        operador: updated.rows[0].operador,
+        dataRecebimento: updated.rows[0].data_recebimento,
+        status: updated.rows[0].status,
+        cosmetico: null,
+        funcional: null,
+        embalagem: null,
+        pallet: null,
+        expedicao: null,
+        sucata: null,
+        reparo_eletronico: null,
+        historico: pastHistorico,
+        ciclos_anteriores: pastCiclos
+      }
+    });
+  } catch (err) {
+    console.error('[Server] Erro na reentrada:', err);
+    res.status(500).json({ error: err.message || 'Erro ao processar reentrada de unidade.' });
   }
 });
 
